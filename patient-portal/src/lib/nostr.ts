@@ -1,6 +1,5 @@
 /**
  * src/lib/nostr.ts
- * Phase 5: Added getSharedSecret() for NIP-44 ECDH encryption
  */
 
 const P  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
@@ -109,7 +108,7 @@ export function getPublicKey(sk: Uint8Array):Uint8Array{
 }
 
 /**
- * NEW in Phase 5: ECDH shared secret for NIP-44 encryption.
+ * ECDH shared secret for NIP-44 encryption..
  * For solo practice: encrypt to self (sk + own pubkey = consistent shared secret).
  * For patient sharing: encrypt to patient pubkey.
  * Returns the x-coordinate of the shared EC point (32 bytes).
@@ -128,8 +127,8 @@ export const FHIR_KINDS = {
   MedicationRequest: 1002,  // Changed from 10002
   Observation:       1003,  // Changed from 10003
   Condition:         1004,  // Changed from 10004
-  AllergyIntolerance: 1005, // New for Phase 6f
-  Immunization:      1006,  // New for Phase 6f
+  AllergyIntolerance: 1005,  
+  Immunization:      1006,  
   Message:           1007,
   ServiceRequest:    1008,  // ← ADD: lab + imaging orders
   DiagnosticReport:  1009,  // ← ADD: results, links back to order via ["e", orderId, "", "result"] tag
@@ -150,7 +149,7 @@ export interface NostrEvent {
 
 export async function buildAndSignEvent(
   kind:      number,
-  content:   string,   // Phase 5: pass already-encrypted string
+  content:   string,   
   tags:      string[][],
   sk:        Uint8Array,
 ): Promise<NostrEvent> {
@@ -235,7 +234,7 @@ export async function verifyEvent(event: {
   }
 }
 
-// ─── Multi-User / Staff Access (Phase 18) ─────────────────────────────────────
+// ─── Multi-User / Staff Access ─────────────────────────────────────
 
 /** Event kinds for staff management — separate from clinical FHIR kinds */
 export const STAFF_KINDS = {
