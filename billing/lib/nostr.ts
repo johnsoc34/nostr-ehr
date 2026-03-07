@@ -10,10 +10,11 @@ export async function sendInvoiceDM(params: {
   amount: number;
   paymentUrl: string;
 }) {
-  const PRACTICE_NSEC = process.env.NOSTR_NSEC;
-  if (!PRACTICE_NSEC) throw new Error('NOSTR_NSEC not configured');
+  // Use dedicated billing agent keypair — practice nsec stays in cold storage
+  const BILLING_NSEC = process.env.BILLING_AGENT_NSEC || process.env.NOSTR_NSEC;
+  if (!BILLING_NSEC) throw new Error('BILLING_AGENT_NSEC not configured (NOSTR_NSEC also accepted for migration)');
 
-  const { data: practiceSeckey } = nip19.decode(PRACTICE_NSEC);
+  const { data: billingSeckey } = nip19.decode(BILLING_NSEC);
   const { data: patientPubkey } = nip19.decode(params.recipientNpub);
 
   const message = `📋 New Invoice: ${params.invoiceId}
@@ -26,8 +27,10 @@ This invoice was sent via your ${process.env.PRACTICE_NAME || "practice"} billin
 
   // NIP-17: create gift-wrapped DM (kind 1059)
   // Inner rumor (kind 14) → seal (kind 13) → gift wrap (kind 1059, throwaway key)
+  // Note: rumor is signed by billing agent key, not practice key.
+  // Patients verify trust via kind 1015 ServiceAgentGrant on the relay.
   const giftWrap = wrapEvent(
-    practiceSeckey as Uint8Array,
+    billingSeckey as Uint8Array,
     { publicKey: patientPubkey as string },
     message
   );

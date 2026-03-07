@@ -21,6 +21,8 @@ import { evaluateImmunizations, evaluateWellCheck, type ImmunizationRecord, type
 import VideoRoom from "../lib/VideoRoom";
 import { TelehealthSession, TELEHEALTH_KINDS } from "../lib/telehealth";
 
+const AGENT_KINDS = { ServiceAgentGrant: 1015 } as const;
+
 
 // ─── Practice Configuration (from environment variables) ─────────────────────
 // Electron: read config synchronously via preload. Falls back to env vars.
@@ -7639,6 +7641,319 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
   );
 }
 
+interface ServiceAgent {
+  name: string;
+  service: "billing" | "fhir-reader";
+  pkHex: string;
+  nsec: string;
+  npub: string;
+  grantedAt: number;
+}
+
+function ServiceAgentsManager({ keys, relay }: {
+  keys: Keypair;
+  relay: ReturnType<typeof useRelay>;
+}) {
+  const [agents, setAgents] = useState<{ service: string; pkHex: string; grantedAt: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState<"billing" | "fhir-reader" | null>(null);
+  const [generatedAgent, setGeneratedAgent] = useState<ServiceAgent | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    if (!keys || relay.status !== "connected") return;
+    let cancelled = false;
+    const found: { service: string; pkHex: string; grantedAt: number }[] = [];
+
+    const subId = relay.subscribe(
+      { kinds: [AGENT_KINDS.ServiceAgentGrant], authors: [keys.pkHex], limit: 20 },
+      (ev: NostrEvent) => {
+        if (ev.pubkey !== keys.pkHex) return;
+        const serviceTag = ev.tags.find(t => t[0] === "service")?.[1];
+        const pTag = ev.tags.find(t => t[0] === "p")?.[1];
+        if (serviceTag && pTag) {
+          const existing = found.findIndex(a => a.service === serviceTag);
+          if (existing >= 0) {
+            if (ev.created_at > found[existing].grantedAt) {
+              found[existing] = { service: serviceTag, pkHex: pTag, grantedAt: ev.created_at };
+            }
+          } else {
+            found.push({ service: serviceTag, pkHex: pTag, grantedAt: ev.created_at });
+          }
+        }
+      },
+      () => {
+        if (!cancelled) { setAgents(found); setLoading(false); }
+        relay.unsubscribe(subId);
+      }
+    );
+    setTimeout(() => { try { relay.unsubscribe(subId); } catch {} if (!cancelled) setLoading(false); }, 5000);
+    return () => { cancelled = true; };
+  }, [keys, relay.status]);
+
+  const copyVal = (label: string, val: string) => {
+    navigator.clipboard.writeText(val);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleGenerate = (service: "billing" | "fhir-reader") => {
+    const sk = generateSecretKey();
+    const pk = getPublicKey(sk);
+    setGeneratedAgent({
+      name: service === "billing" ? "Billing Agent" : "FHIR Reader",
+      service,
+      pkHex: toHex(pk),
+      nsec: nsecEncode(sk),
+      npub: npubEncode(pk),
+      grantedAt: Math.floor(Date.now() / 1000),
+    });
+    setGenerating(service);
+  };
+
+  const handlePublish = async () => {
+    if (!generatedAgent || !keys) return;
+    setPublishing(true);
+    setStatus("Publishing service agent grant...");
+
+    try {
+      const { service, pkHex } = generatedAgent;
+
+      const agentGrantPayload = {
+        agentPubkey: pkHex,
+        service,
+        permissions: service === "billing" ? ["send-invoices"] : ["read-clinical-data"],
+        grantedAt: Math.floor(Date.now() / 1000),
+      };
+      const agentSharedX = getSharedSecret(keys.sk, pkHex);
+      const encryptedGrant = await nip44Encrypt(JSON.stringify(agentGrantPayload), agentSharedX);
+      const grantTags = [
+        ["p", pkHex],
+        ["service", service],
+        ["d", `service-agent-${service}`],
+      ];
+      const grantEvent = await buildAndSignEvent(
+        AGENT_KINDS.ServiceAgentGrant, encryptedGrant, grantTags, keys.sk
+      );
+      const grantOk = await relay.publish(grantEvent);
+      if (!grantOk) {
+        setStatus("✗ Failed to publish service agent grant.");
+        setPublishing(false);
+        return;
+      }
+      setStatus("✓ Agent grant published.");
+
+      if (service === "fhir-reader") {
+        setStatus("Publishing practice key grant for FHIR reader...");
+        const practiceSharedSecret = toHex(getSharedSecret(keys.sk, keys.pkHex));
+        const practicePayload = { practiceSharedSecret, practicePkHex: keys.pkHex };
+        const encrypted1013 = await nip44Encrypt(JSON.stringify(practicePayload), agentSharedX);
+        const tags1013 = [["p", pkHex], ["grant", "practice-secret"]];
+        const event1013 = await buildAndSignEvent(STAFF_KINDS.PracticeKeyGrant, encrypted1013, tags1013, keys.sk);
+        const ok1013 = await relay.publish(event1013);
+        if (!ok1013) {
+          setStatus("✗ Agent grant published but practice key grant failed. FHIR reader won't be able to decrypt.");
+          setPublishing(false);
+          return;
+        }
+
+        setStatus("Publishing patient key grants for FHIR reader...");
+        const patients = loadPatients();
+        let granted = 0;
+        for (const p of patients) {
+          if (!p.npub) continue;
+          try {
+            const patientPkHex = npubToHex(p.npub);
+            const patientSharedSecret = toHex(getSharedSecret(keys.sk, patientPkHex));
+            const payload = { patientId: p.id, patientPkHex, patientSharedSecret };
+            const encrypted = await nip44Encrypt(JSON.stringify(payload), agentSharedX);
+            const tags = [["p", pkHex], ["pt", p.id], ["grant", "patient-secret"]];
+            const event = await buildAndSignEvent(STAFF_KINDS.PatientKeyGrant, encrypted, tags, keys.sk);
+            if (await relay.publish(event)) granted++;
+          } catch (e) { console.warn(`Patient grant failed for ${p.id}:`, e); }
+        }
+        setStatus(`✓ All grants published. FHIR reader has access to ${granted} patients.`);
+      } else {
+        setStatus("✓ Billing agent authorized. No decryption grants needed.");
+      }
+
+      setAgents(prev => {
+        const filtered = prev.filter(a => a.service !== service);
+        return [...filtered, { service, pkHex, grantedAt: Math.floor(Date.now() / 1000) }];
+      });
+
+    } catch (e: any) {
+      setStatus(`✗ Error: ${e.message}`);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const serviceLabels: Record<string, string> = {
+    billing: "Billing Agent",
+    "fhir-reader": "FHIR Reader",
+  };
+  const serviceIcons: Record<string, string> = {
+    billing: "💳",
+    "fhir-reader": "🔬",
+  };
+  const serviceDescriptions: Record<string, string> = {
+    billing: "Sends NIP-17 encrypted invoice DMs. Cannot read clinical data.",
+    "fhir-reader": "Reads clinical data via ECDH grants. Cannot sign as practice.",
+  };
+
+  return (
+    <div style={{ ...S.card, marginBottom: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>🤖 Service Agents</div>
+      <div style={{ fontSize: 10, color: "#64748b", marginBottom: 12 }}>
+        Dedicated keypairs for server-side services. Practice nsec stays in cold storage.
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 11, color: "#64748b", padding: 8 }}>Loading agents...</div>
+      ) : (
+        <>
+          {agents.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {agents.map(a => (
+                <div key={a.service} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
+                  borderBottom: "1px solid #1e293b"
+                }}>
+                  <div style={{ fontSize: 20 }}>{serviceIcons[a.service] || "🔧"}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>
+                      {serviceLabels[a.service] || a.service}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#475569", fontFamily: "monospace" }}>
+                      {a.pkHex.slice(0, 16)}...{a.pkHex.slice(-8)}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#64748b" }}>
+                      Authorized {new Date(a.grantedAt * 1000).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
+                    background: "#0f2a1f", color: "#10b981"
+                  }}>Active</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!generating && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+              {!agents.find(a => a.service === "billing") && (
+                <Btn small solid col="#f59e0b" onClick={() => handleGenerate("billing")}>
+                  + Billing Agent
+                </Btn>
+              )}
+              {!agents.find(a => a.service === "fhir-reader") && (
+                <Btn small solid col="#8b5cf6" onClick={() => handleGenerate("fhir-reader")}>
+                  + FHIR Reader
+                </Btn>
+              )}
+              {agents.length === 2 && (
+                <div style={{ fontSize: 10, color: "#475569", alignSelf: "center" }}>
+                  Both agents configured.
+                </div>
+              )}
+            </div>
+          )}
+
+          {generatedAgent && (
+            <div style={{
+              background: "#0f172a", border: "1px solid #334155", borderRadius: 8,
+              padding: 16, marginTop: 12
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "#e2e8f0", marginBottom: 8 }}>
+                {serviceIcons[generatedAgent.service]} {generatedAgent.name} — New Keypair
+              </div>
+
+              <div style={{
+                background: "#1c0a0a", border: "1px solid #7f1d1d", borderRadius: 6,
+                padding: 10, marginBottom: 12, fontSize: 10, color: "#fca5a5"
+              }}>
+                ⚠️ Save the nsec below to the server's <code>.env</code> file.
+                It will NOT be shown again after you close this panel.
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>
+                  nsec (save to server .env as {generatedAgent.service === "billing"
+                    ? "BILLING_AGENT_NSEC" : "FHIR_AGENT_NSEC"})
+                </div>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "#1e293b", borderRadius: 6, padding: "6px 10px"
+                }}>
+                  <code style={{
+                    fontSize: 10, color: "#fbbf24", fontFamily: "monospace",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, flex: 1
+                  }}>
+                    {generatedAgent.nsec}
+                  </code>
+                  <Btn small col={copied === "nsec" ? "#22c55e" : "#64748b"}
+                    onClick={() => copyVal("nsec", generatedAgent.nsec)}>
+                    {copied === "nsec" ? "✓" : "Copy"}
+                  </Btn>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>
+                  Public key (hex) — add to relay whitelist
+                </div>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "#1e293b", borderRadius: 6, padding: "6px 10px"
+                }}>
+                  <code style={{
+                    fontSize: 10, color: "#94a3b8", fontFamily: "monospace",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, flex: 1
+                  }}>
+                    {generatedAgent.pkHex}
+                  </code>
+                  <Btn small col={copied === "pk" ? "#22c55e" : "#64748b"}
+                    onClick={() => copyVal("pk", generatedAgent.pkHex)}>
+                    {copied === "pk" ? "✓" : "Copy"}
+                  </Btn>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 10, color: "#64748b", marginBottom: 12 }}>
+                {serviceDescriptions[generatedAgent.service]}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn small solid col="#22c55e" onClick={handlePublish} disabled={publishing}>
+                  {publishing ? "Publishing..." : "Publish Grants to Relay"}
+                </Btn>
+                <Btn small col="#64748b" onClick={() => { setGeneratedAgent(null); setGenerating(null); setStatus(""); }}>
+                  Cancel
+                </Btn>
+              </div>
+
+              {status && (
+                <div style={{
+                  fontSize: 10, marginTop: 8, padding: "6px 10px", borderRadius: 6,
+                  background: status.startsWith("✗") ? "#1c0a0a" : "#0f2a1f",
+                  color: status.startsWith("✗") ? "#f87171" : "#4ade80",
+                  border: `1px solid ${status.startsWith("✗") ? "#7f1d1d" : "#166534"}`
+                }}>
+                  {status}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Settings / Practice Key Management ──────────────────────────────────────
 function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof useRelay>}){
   const [showKeys,setShowKeys]=useState(false);
@@ -7917,6 +8232,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
 
         {/* Staff Management */}
         <StaffManagement keys={keys} relay={relay}/>
+        <ServiceAgentsManager keys={keys} relay={relay}/>
 
         {/* Backup Actions */}
         <div style={{...S.card,marginBottom:16}}>
