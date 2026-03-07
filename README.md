@@ -93,11 +93,43 @@ The relay stores only encrypted blobs. Even with full database access, data is u
 | 1013 | PracticeKeyGrant | Per-staff practice-wide decryption grant |
 | 1014 | StaffRoster | Encrypted staff member list and roles |
 
+## Patient Data Sovereignty
+
+NostrEHR is built on a fundamental principle: **patients own their health data.**
+
+Because all clinical records are standard Nostr events containing FHIR R4 JSON, patients are not locked into any specific portal or application. With their nsec (private key) and the relay URL, a patient — or any developer they trust — can:
+
+- **Build a custom portal** — Fork `patient-portal/` and modify the UI, add features, or build a mobile app. The data layer is just Nostr subscriptions + NIP-44 decryption.
+- **Export to FHIR** — The built-in portal supports FHIR R4 Bundle export. Any FHIR-compatible system can ingest these records.
+- **Use any Nostr client** — Messages (kind 1007) and billing invoices (kind 1059) are readable in standard Nostr clients that support NIP-17.
+- **Mirror to another relay** — Patients can republish their events to a personal relay for redundancy or to share with another provider.
+- **Write a client from scratch** — The data model is documented above. Any developer who understands Nostr and FHIR can build an alternative client.
+
+### Encryption
+
+Each event has two encrypted copies of the same FHIR JSON:
+
+- `content` — Encrypted to the practice pubkey (NIP-44, practice can always read)
+- `patient-content` tag — Encrypted to the patient pubkey (NIP-44, patient can always read their own data)
+
+To decrypt your records, compute the NIP-44 shared secret between your nsec and the practice pubkey, then decrypt the `patient-content` tag value on each event.
+
+### Building a Custom Client
+
+A minimal patient client needs to:
+
+1. Connect to the practice relay via WebSocket
+2. Subscribe to events tagged with the patient's pubkey: `{"kinds": [1000,1001,1002,1003,1004,1005,1006,1007,1008,1009,1011], "#p": ["<patient_pubkey_hex>"]}`
+3. For each event, decrypt the `patient-content` tag using NIP-44 with `getSharedSecret(patientSk, practicePubkey)`
+4. Parse the decrypted string as FHIR R4 JSON
+
+The `patient-portal/src/lib/` directory contains reference implementations of the Nostr connection, NIP-44 decryption, and FHIR data handling.
+
 ## Quick Start
 
 ### Option 1: Desktop App (Recommended for Evaluation)
 
-Download `NostrEHR-Setup-1.0.0.exe` from [Releases](../../releases) (coming soon).
+Download `NostrEHR-Setup-1.0.0.exe` from [Releases](../../releases).
 
 Run the installer. On first launch, choose **Demo Mode** to explore with a temporary keypair, or enter your own relay and practice key configuration.
 
@@ -105,8 +137,8 @@ Run the installer. On first launch, choose **Demo Mode** to explore with a tempo
 
 ```bash
 # Clone the repo
-git clone https://github.com/ImmutableHealth/NostrEHR.git
-cd NostrEHR/ehr
+git clone https://github.com/johnsoc34/nostr-ehr.git
+cd nostr-ehr/ehr
 
 # Install dependencies
 npm install
@@ -132,12 +164,12 @@ For a complete self-hosted deployment (relay + portal + billing + calendar + blo
 4. **Apps**: Deploy portal, billing, calendar, blossom, fhir-api with PM2 behind nginx
 5. **EHR**: Run locally on the doctor's PC (Electron or `npm run dev`)
 
-See [deployment guide](docs/DEPLOYMENT.md) for detailed instructions.
+See [deployment guide](ehr/docs/DEPLOYMENT.md) for detailed instructions.
 
 ## Project Structure
 
 ```
-NostrEHR/
+nostr-ehr/
 ├── ehr/                    # EHR desktop app (Next.js + Electron)
 │   ├── electron/           # Electron shell, setup wizard, splash
 │   ├── src/app/page.tsx    # Main EHR SPA (~10,000+ lines)
@@ -148,8 +180,7 @@ NostrEHR/
 ├── fhir-api/               # FHIR REST API (Express, server-deployed)
 ├── blossom/                # File server config (NIP-B7)
 ├── audit/                  # Audit trail scripts
-├── scripts/                # Cron scripts (whitelist sync, backups, etc.)
-└── relay/                  # Relay config template
+└── relay/                  # Relay config template + NIP-17 patch
 ```
 
 ## Technology Stack
@@ -171,7 +202,7 @@ NostrEHR/
 - **TURN server**: coturn (required for telehealth video visits across NAT/firewalls)
 - **Server**: Any Linux VPS for portal/billing/calendar (optional for evaluation)
 
-> **Note:** nostr-rs-relay requires a patch to exempt kind 1059 (NIP-17 gift wraps) from NIP-42 authentication, and `max_event_bytes` must be set to at least 65536 for telehealth SDP signaling. See the [deployment guide](docs/DEPLOYMENT.md) for details.
+> **Note:** nostr-rs-relay requires a patch to exempt kind 1059 (NIP-17 gift wraps) from NIP-42 authentication, and `max_event_bytes` must be set to at least 65536 for telehealth SDP signaling. See the [deployment guide](ehr/docs/DEPLOYMENT.md) for details.
 
 ## Contributing
 
@@ -186,4 +217,3 @@ MIT
 ## Acknowledgments
 
 Built on the [Nostr protocol](https://nostr.com) and the work of the open-source Nostr community. Secp256k1, Schnorr signatures, NIP-44 (ChaCha20-Poly1305), and ECDH are implemented from scratch in pure TypeScript with no external crypto dependencies.
- 
