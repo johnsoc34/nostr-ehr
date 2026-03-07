@@ -1,0 +1,101 @@
+# ═══════════════════════════════════════════════════════════════
+# NostrEHR — .gitignore
+# ═══════════════════════════════════════════════════════════════
+
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Next.js build output ─────────────────────────────────────
+.next/
+out/
+
+# ── Electron build output ────────────────────────────────────
+ehr/dist-electron/
+ehr/.electron-staging/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.snap
+*.deb
+*.rpm
+
+# ── Environment / secrets ────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.development
+.env*.local
+!.env.example
+
+# ── SQLite databases ─────────────────────────────────────────
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ── Nostr relay data ─────────────────────────────────────────
+relay/data/
+relay/nostr.db
+
+# ── Blossom uploads ──────────────────────────────────────────
+blossom/uploads/
+blossom/data/
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS files ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ── IDE / editor ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ── TypeScript build info ─────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ── Test / coverage ───────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Misc ──────────────────────────────────────────────────────
+*.bak
+*.orig
+*.backup
+*.tmp
+
+# ── Backups (server-side, never tracked) ──────────────────────
+backups/
+
+# ── Audit trail output ───────────────────────────────────────
+audit/output/
+audit/*.html
+
+# ── Keys / credentials (safety net) ──────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+config.json
+
+# Misc junk
+*.crdownload
+*.zip
+sanitize-for-publish.ps1
+env-var-sanitization-plan.md

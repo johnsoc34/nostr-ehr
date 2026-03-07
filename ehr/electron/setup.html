@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>NostrEHR — Practice Setup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+    background: #0b1120;
+    color: #e2e8f0;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 40px 32px 48px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .header .logo { font-size: 40px; margin-bottom: 8px; }
+  .header h1 {
+    font-size: 22px; font-weight: 700;
+    color: #f1f5f9; letter-spacing: -0.02em;
+  }
+  .header p {
+    font-size: 13px; color: #64748b;
+    margin-top: 6px; line-height: 1.5;
+  }
+
+  /* Steps */
+  .steps {
+    display: flex; gap: 8px;
+    margin-bottom: 32px;
+    justify-content: center;
+  }
+  .step {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; color: #475569;
+    padding: 6px 14px; border-radius: 20px;
+    background: #131c2e;
+    border: 1px solid #1e293b;
+    transition: all 0.2s;
+  }
+  .step.active {
+    color: #3b82f6;
+    background: #172240;
+    border-color: #3b82f650;
+  }
+  .step.done {
+    color: #10b981;
+    background: #0f2a1f;
+    border-color: #10b98140;
+  }
+  .step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    background: #1e293b; color: #64748b;
+  }
+  .step.active .step-num { background: #3b82f630; color: #3b82f6; }
+  .step.done .step-num { background: #10b98130; color: #10b981; }
+
+  /* Card */
+  .card {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 15px; font-weight: 700; color: #f1f5f9;
+    margin-bottom: 4px;
+  }
+  .card .desc {
+    font-size: 12px; color: #64748b;
+    margin-bottom: 20px; line-height: 1.5;
+  }
+
+  /* Form */
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 11px; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 5px;
+  }
+  .field label .req { color: #ef4444; margin-left: 2px; }
+  .field label .opt { color: #475569; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .field input, .field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field textarea:focus {
+    border-color: #3b82f6;
+  }
+  .field input::placeholder, .field textarea::placeholder {
+    color: #334155;
+  }
+  .field .hint {
+    font-size: 11px; color: #475569;
+    margin-top: 4px; line-height: 1.4;
+  }
+  .field textarea { resize: vertical; min-height: 60px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Buttons */
+  .btn-row {
+    display: flex; gap: 10px; justify-content: flex-end;
+    margin-top: 24px;
+  }
+  .btn {
+    padding: 10px 24px; border-radius: 8px;
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: #3b82f6; color: #fff;
+  }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; color: #94a3b8;
+    border: 1px solid #1e293b;
+  }
+  .btn-secondary:hover { border-color: #334155; color: #e2e8f0; }
+
+  /* Validation */
+  .field.error input { border-color: #ef4444; }
+  .field .error-msg {
+    font-size: 11px; color: #ef4444; margin-top: 4px;
+  }
+
+  /* Success */
+  .success {
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .success .check {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+  .success h2 {
+    font-size: 20px; font-weight: 700; color: #f1f5f9;
+    margin-bottom: 8px;
+  }
+  .success p {
+    font-size: 13px; color: #64748b;
+    margin-bottom: 24px; line-height: 1.5;
+  }
+
+  /* Divider */
+  .divider {
+    border: none; border-top: 1px solid #1e293b;
+    margin: 20px 0;
+  }
+
+  /* Section label */
+  .section-label {
+    font-size: 11px; font-weight: 700; color: #3b82f6;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  /* Hidden */
+  .hidden { display: none !important; }
+
+  /* Demo option cards */
+  .demo-option {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 18px; margin-bottom: 10px;
+    background: #0f172a; border: 1px solid #1e293b;
+    border-radius: 10px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .demo-option:hover {
+    border-color: #3b82f650;
+    background: #131d33;
+  }
+  .demo-option:last-child { margin-bottom: 0; }
+  .demo-icon {
+    font-size: 28px; flex-shrink: 0;
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    background: #172240; border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">🩺</div>
+    <h1>NostrEHR Setup</h1>
+    <p>Configure your practice to get started with sovereign health records.</p>
+  </div>
+
+  <!-- Step indicators -->
+  <div class="steps">
+    <div class="step active" id="step-ind-1">
+      <div class="step-num">1</div> Relay &amp; Identity
+    </div>
+    <div class="step" id="step-ind-2">
+      <div class="step-num">2</div> Services
+    </div>
+    <div class="step" id="step-ind-3">
+      <div class="step-num">3</div> Practice Info
+    </div>
+  </div>
+
+  <!-- Step 1: Relay & Identity -->
+  <div id="step-1">
+    <div class="card">
+      <h2>Nostr Relay &amp; Practice Identity</h2>
+      <p class="desc">Connect to your self-hosted relay and identify your practice on the Nostr network.</p>
+
+      <div class="field">
+        <label>Relay URL <span class="req">*</span></label>
+        <input type="text" id="relayUrl" placeholder="wss://relay.yourpractice.com" />
+        <div class="hint">Your self-hosted nostr-rs-relay WebSocket URL.</div>
+      </div>
+
+      <div class="field">
+        <label>Practice Public Key (hex) <span class="req">*</span></label>
+        <input type="text" id="practicePubkey" placeholder="64-character hex pubkey" maxlength="64" />
+        <div class="hint">The hex-encoded Nostr public key for your practice.</div>
+        <div id="keygen-area" style="margin-top:8px;">
+          <button class="btn btn-secondary" onclick="generateKeypair()" id="keygen-btn" style="font-size:12px;padding:6px 14px;">
+            🔑 Generate New Practice Keypair
+          </button>
+        </div>
+        <div id="keygen-result" class="hidden" style="margin-top:10px;background:#0f2a1f;border:1px solid #166534;border-radius:8px;padding:14px;position:relative;">
+          <button onclick="document.getElementById('keygen-result').classList.add('hidden')" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;line-height:1;" title="Dismiss">✕</button>
+          <div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:8px;">✅ Keypair Generated</div>
+          <div style="font-size:11px;color:#fde68a;font-weight:600;margin-bottom:10px;background:#422006;border:1px solid #92400e;border-radius:6px;padding:8px 10px;line-height:1.5;">
+            ⚠️ SAVE YOUR SECRET KEY NOW. It will not be shown again. If you lose it, you lose access to all patient data permanently.
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:10px;font-weight:700;color:#86efac;text-transform:uppercase;letter-spacing:0.06em;">Secret Key (nsec) — SAVE THIS SECURELY</label>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+              <input type="text" id="keygen-nsec" readonly style="flex:1;font-size:10px;font-family:monospace;padding:8px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#fbbf24;" />
+              <button onclick="copyField('keygen-nsec')" style="padding:6px 10px;border-radius:6px;background:#166534;border:1px solid #22c55e40;color:#4ade80;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;">📋 Copy</button>
+            </div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:10px;font-weight:700;color:#86efac;text-transform:uppercase;letter-spacing:0.06em;">Secret Key (hex)</label>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+              <input type="text" id="keygen-hex" readonly style="flex:1;font-size:10px;font-family:monospace;padding:8px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#94a3b8;" />
+              <button onclick="copyField('keygen-hex')" style="padding:6px 10px;border-radius:6px;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600;">📋 Copy</button>
+            </div>
+          </div>
+          <div style="font-size:10px;color:#64748b;line-height:1.5;margin-top:6px;">
+            The public key has been auto-filled above. Store the secret key in a password manager or on an encrypted USB drive.
+          </div>
+          <button onclick="document.getElementById('keygen-result').classList.add('hidden')" style="margin-top:10px;padding:6px 14px;border-radius:6px;background:#16653440;border:1px solid #22c55e40;color:#4ade80;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;">
+            ✓ I've saved my key — hide this
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Practice Name <span class="req">*</span></label>
+        <input type="text" id="practiceName" placeholder="My Practice Name" />
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextStep(2)">Continue →</button>
+    </div>
+
+    <div style="text-align:center;margin-top:20px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;height:1px;background:#1e293b;"></div>
+        <span style="font-size:11px;color:#475569;">or</span>
+        <div style="flex:1;height:1px;background:#1e293b;"></div>
+      </div>
+      <button class="btn btn-secondary" onclick="showStep('demo')" style="width:100%;">
+        🔍 Just exploring? Try Demo Mode
+      </button>
+    </div>
+  </div>
+
+  <!-- Demo Mode Confirmation -->
+  <div id="step-demo" class="hidden">
+    <div class="card">
+      <h2>Demo Mode</h2>
+      <p class="desc">Explore NostrEHR with a temporary keypair on a public relay. Perfect for evaluating the software before setting up your own infrastructure.</p>
+
+      <div style="background:#422006;border:1px solid #92400e;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;color:#fbbf24;margin-bottom:6px;">⚠️ Demo Mode Notice</div>
+        <div style="font-size:12px;color:#fde68a;line-height:1.5;">
+          A temporary keypair will be generated and you'll be auto-logged in. Data is published to a public relay.
+          <strong>Do not enter real patient information.</strong>
+        </div>
+      </div>
+
+      <div style="font-size:12px;color:#64748b;line-height:1.6;">
+        <div style="margin-bottom:6px;">What you'll be able to do:</div>
+        <div style="color:#94a3b8;">• Browse the full EHR interface and all clinical modules</div>
+        <div style="color:#94a3b8;">• Create test patients and encounters</div>
+        <div style="color:#94a3b8;">• Try PDF generation, growth charts, immunization tracking</div>
+        <div style="color:#94a3b8;margin-bottom:10px;">• See how Nostr-based encrypted records work</div>
+        <div>When you're ready to set up for real, click <strong style="color:#f1f5f9;">⚙️ Configure Practice</strong> in the demo banner.</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="showStep(1)">← Back to Setup</button>
+      <button class="btn btn-primary" onclick="launchDemo()" id="demoBtnLaunch">Launch Demo →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Services -->
+  <div id="step-2" class="hidden">
+    <div class="card">
+      <h2>Connected Services</h2>
+      <p class="desc">URLs for your portal, billing, calendar, and file storage. Leave blank if not set up yet.</p>
+
+      <div class="field">
+        <label>Patient Portal URL <span class="opt">(optional)</span></label>
+        <input type="text" id="portalUrl" placeholder="https://portal.yourpractice.com" />
+      </div>
+
+      <div class="field">
+        <label>Billing Dashboard URL <span class="opt">(optional)</span></label>
+        <input type="text" id="billingUrl" placeholder="https://billing.yourpractice.com" />
+      </div>
+
+      <div class="field">
+        <label>Calendar URL <span class="opt">(optional)</span></label>
+        <input type="text" id="calendarUrl" placeholder="https://calendar.yourpractice.com" />
+      </div>
+
+      <div class="field">
+        <label>Blossom File Server URL <span class="opt">(optional)</span></label>
+        <input type="text" id="blossomUrl" placeholder="https://blossom.yourpractice.com" />
+      </div>
+
+      <hr class="divider">
+      <div class="section-label">Telehealth (TURN Relay)</div>
+
+      <div class="field">
+        <label>TURN Host <span class="opt">(optional)</span></label>
+        <input type="text" id="turnHost" placeholder="turn.yourpractice.com" />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>TURN Username</label>
+          <input type="text" id="turnUser" placeholder="" />
+        </div>
+        <div class="field">
+          <label>TURN Credential</label>
+          <input type="password" id="turnCred" placeholder="" />
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="nextStep(3)">Continue →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Practice Info -->
+  <div id="step-3" class="hidden">
+    <div class="card">
+      <h2>Practice Details</h2>
+      <p class="desc">Used for PDF generation (school forms, immunization records, etc.). Can be updated later in Settings.</p>
+
+      <div class="field">
+        <label>Provider Name <span class="opt">(optional)</span></label>
+        <input type="text" id="practiceProvider" placeholder="Dr. Jane Smith, MD" />
+      </div>
+
+      <div class="field">
+        <label>Street Address <span class="opt">(optional)</span></label>
+        <input type="text" id="practiceAddress" placeholder="123 Main Street, Suite 100" />
+      </div>
+
+      <div class="field">
+        <label>City, State, ZIP <span class="opt">(optional)</span></label>
+        <input type="text" id="practiceCityStateZip" placeholder="Austin, TX 78701" />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Phone <span class="opt">(optional)</span></label>
+          <input type="text" id="practicePhone" placeholder="(512) 555-0100" />
+        </div>
+        <div class="field">
+          <label>Fax <span class="opt">(optional)</span></label>
+          <input type="text" id="practiceFax" placeholder="(512) 555-0101" />
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(2)">← Back</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveAndLaunch()">Save &amp; Launch EHR →</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Success (brief) -->
+  <div id="step-4" class="hidden">
+    <div class="card">
+      <div class="success">
+        <div class="check">✅</div>
+        <h2>Setup Complete</h2>
+        <p>Your practice configuration has been saved. Starting NostrEHR…</p>
+        <div class="loader" style="width:120px;height:3px;background:#1e293b;border-radius:3px;margin:0 auto;overflow:hidden;">
+          <div style="width:40%;height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:3px;animation:slide 1.4s ease-in-out infinite;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+</style>
+
+<script>
+  let currentStep = 1;
+
+  // Field IDs for each step
+  const REQUIRED = {
+    1: ["relayUrl", "practicePubkey", "practiceName"],
+    2: [],
+    3: [],
+  };
+
+  const ALL_FIELDS = [
+    "relayUrl", "practicePubkey", "practiceName",
+    "portalUrl", "billingUrl", "calendarUrl", "blossomUrl",
+    "turnHost", "turnUser", "turnCred",
+    "practiceProvider", "practiceAddress", "practiceCityStateZip",
+    "practicePhone", "practiceFax",
+  ];
+
+  // Load existing config if editing
+  window.addEventListener("DOMContentLoaded", async () => {
+    if (!window.electronAPI) return;
+    const config = await window.electronAPI.getConfig();
+    if (config) {
+      // Map config keys to field IDs
+      ALL_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && config[id]) el.value = config[id];
+      });
+    }
+  });
+
+  function validate(step) {
+    let valid = true;
+    (REQUIRED[step] || []).forEach(id => {
+      const el = document.getElementById(id);
+      const field = el.closest(".field");
+      const existing = field.querySelector(".error-msg");
+      if (existing) existing.remove();
+      field.classList.remove("error");
+
+      if (!el.value.trim()) {
+        valid = false;
+        field.classList.add("error");
+        const msg = document.createElement("div");
+        msg.className = "error-msg";
+        msg.textContent = "This field is required";
+        field.appendChild(msg);
+      }
+    });
+
+    // Extra validation for pubkey
+    if (step === 1) {
+      const pk = document.getElementById("practicePubkey");
+      if (pk.value.trim() && !/^[a-f0-9]{64}$/i.test(pk.value.trim())) {
+        valid = false;
+        const field = pk.closest(".field");
+        field.classList.add("error");
+        const existing = field.querySelector(".error-msg");
+        if (existing) existing.remove();
+        const msg = document.createElement("div");
+        msg.className = "error-msg";
+        msg.textContent = "Must be a 64-character hex string";
+        field.appendChild(msg);
+      }
+
+      const relay = document.getElementById("relayUrl");
+      if (relay.value.trim() && !relay.value.trim().startsWith("wss://")) {
+        valid = false;
+        const field = relay.closest(".field");
+        field.classList.add("error");
+        const existing = field.querySelector(".error-msg");
+        if (existing) existing.remove();
+        const msg = document.createElement("div");
+        msg.className = "error-msg";
+        msg.textContent = "Must start with wss://";
+        field.appendChild(msg);
+      }
+    }
+
+    return valid;
+  }
+
+  function showStep(n) {
+    const allSteps = ['1','2','3','4','demo'];
+    allSteps.forEach(s => {
+      const el = document.getElementById(`step-${s}`);
+      if (el) el.classList.toggle("hidden", s != n);
+    });
+    // Update step indicators
+    if (typeof n === 'number') {
+      for (let i = 1; i <= 3; i++) {
+        const ind = document.getElementById(`step-ind-${i}`);
+        ind.classList.remove("active", "done");
+        if (i < n) ind.classList.add("done");
+        else if (i === n) ind.classList.add("active");
+      }
+    }
+    currentStep = n;
+  }
+
+  function nextStep(n) {
+    if (!validate(currentStep)) return;
+    showStep(n);
+  }
+
+  function prevStep(n) {
+    showStep(n);
+  }
+
+  async function generateKeypair() {
+    var btn = document.getElementById('keygen-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating...';
+
+    try {
+      var skBytes = new Uint8Array(32);
+      crypto.getRandomValues(skBytes);
+      var skHex = Array.from(skBytes).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+
+      // Load noble-secp256k1 to derive pubkey
+      var mod = await import('https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/+esm');
+      var pkBytes = mod.getPublicKey(skHex, true);
+      var pkHex = Array.from(pkBytes.slice(1)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+
+      // Encode nsec (bech32)
+      var nsec = bech32Encode('nsec', skBytes);
+
+      // Auto-fill the pubkey field
+      document.getElementById('practicePubkey').value = pkHex;
+
+      // Show the result
+      document.getElementById('keygen-nsec').value = nsec;
+      document.getElementById('keygen-hex').value = skHex;
+      document.getElementById('keygen-result').classList.remove('hidden');
+      document.getElementById('keygen-area').querySelector('button').textContent = '🔑 Generate Another Keypair';
+    } catch (e) {
+      console.error('Keygen failed:', e);
+      alert('Failed to generate keypair. Check your internet connection (needed to load crypto library).');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function copyField(fieldId) {
+    var el = document.getElementById(fieldId);
+    el.select();
+    navigator.clipboard.writeText(el.value).then(function() {
+      var btn = el.parentElement.querySelector('button');
+      var orig = btn.textContent;
+      btn.textContent = '✓ Copied';
+      setTimeout(function() { btn.textContent = orig; }, 2000);
+    });
+  }
+
+  // Minimal bech32 encoder for nsec
+  function bech32Encode(prefix, data) {
+    var CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+    function polymod(values) {
+      var GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+      var chk = 1;
+      for (var i = 0; i < values.length; i++) {
+        var b = chk >> 25;
+        chk = ((chk & 0x1ffffff) << 5) ^ values[i];
+        for (var j = 0; j < 5; j++) {
+          if ((b >> j) & 1) chk ^= GEN[j];
+        }
+      }
+      return chk;
+    }
+    function hrpExpand(hrp) {
+      var ret = [];
+      for (var i = 0; i < hrp.length; i++) ret.push(hrp.charCodeAt(i) >> 5);
+      ret.push(0);
+      for (var i = 0; i < hrp.length; i++) ret.push(hrp.charCodeAt(i) & 31);
+      return ret;
+    }
+    function createChecksum(hrp, data5) {
+      var values = hrpExpand(hrp).concat(data5).concat([0, 0, 0, 0, 0, 0]);
+      var pm = polymod(values) ^ 1;
+      var ret = [];
+      for (var i = 0; i < 6; i++) ret.push((pm >> (5 * (5 - i))) & 31);
+      return ret;
+    }
+    function convertBits(data, fromBits, toBits, pad) {
+      var acc = 0, bits = 0, ret = [];
+      var maxv = (1 << toBits) - 1;
+      for (var i = 0; i < data.length; i++) {
+        acc = (acc << fromBits) | data[i];
+        bits += fromBits;
+        while (bits >= toBits) {
+          bits -= toBits;
+          ret.push((acc >> bits) & maxv);
+        }
+      }
+      if (pad && bits > 0) ret.push((acc << (toBits - bits)) & maxv);
+      return ret;
+    }
+    var data5 = convertBits(Array.from(data), 8, 5, true);
+    var checksum = createChecksum(prefix, data5);
+    var encoded = prefix + '1';
+    for (var i = 0; i < data5.length; i++) encoded += CHARSET[data5[i]];
+    for (var i = 0; i < checksum.length; i++) encoded += CHARSET[checksum[i]];
+    return encoded;
+  }
+
+  async function launchDemo() {
+    var btn = document.getElementById('demoBtnLaunch');
+    btn.disabled = true;
+    btn.textContent = 'Generating keypair…';
+
+    // Generate a random keypair for demo mode
+    var skHex, pkHex;
+    try {
+      var skBytes = new Uint8Array(32);
+      crypto.getRandomValues(skBytes);
+      skHex = Array.from(skBytes).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+
+      // Load noble-secp256k1 to derive pubkey
+      var mod = await import('https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/+esm');
+      var pkBytes = mod.getPublicKey(skHex, true); // compressed
+      // Remove the 02/03 prefix byte to get 32-byte x-coordinate
+      pkHex = Array.from(pkBytes.slice(1)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    } catch (e) {
+      console.error('Keypair generation failed:', e);
+      btn.disabled = false;
+      btn.textContent = 'Launch Demo →';
+      alert('Failed to generate demo keypair. Please check your internet connection.');
+      return;
+    }
+
+    // Encode as nsec for the EHR login field
+    var nsec = bech32Encode('nsec', skBytes);
+
+    var config = {
+      relayUrl: 'wss://nos.lol',
+      practicePubkey: pkHex,
+      practiceName: 'NostrEHR Demo Practice',
+      demoMode: 'public',
+      demoNsec: nsec,
+    };
+
+    try {
+      await window.electronAPI.saveConfig(config);
+      showStep(4);
+      setTimeout(function() {
+        window.electronAPI.setupComplete();
+      }, 1500);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Launch Demo →';
+      alert("Failed to launch demo: " + err.message);
+    }
+  }
+
+  async function saveAndLaunch() {
+    if (!validate(currentStep)) return;
+
+    const config = {};
+    ALL_FIELDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) config[id] = el.value.trim();
+    });
+
+    const btn = document.getElementById("saveBtn");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+
+    try {
+      await window.electronAPI.saveConfig(config);
+      showStep(4);
+      // Brief pause to show success, then launch
+      setTimeout(() => {
+        window.electronAPI.setupComplete();
+      }, 1500);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Save & Launch EHR →";
+      alert("Failed to save configuration: " + err.message);
+    }
+  }
+</script>
+</body>
+</html>

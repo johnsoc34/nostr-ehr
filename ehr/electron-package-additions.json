@@ -1,0 +1,85 @@
+{
+  "name": "nostr-ehr",
+  "version": "1.0.0",
+  "description": "NostrEHR — Sovereign Pediatric Electronic Health Records",
+  "author": "NostrEHR Contributors",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "next build && electron-builder --win",
+    "electron:build:mac": "next build && electron-builder --mac",
+    "electron:build:linux": "next build && electron-builder --linux",
+    "electron:build:all": "next build && electron-builder --win --mac --linux"
+  },
+  "build": {
+    "appId": "com.nostrehr.app",
+    "productName": "NostrEHR",
+    "copyright": "Copyright © 2026 NostrEHR Contributors",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "!node_modules/.cache"
+    ],
+    "extraResources": [
+      {
+        "from": ".",
+        "to": "nextapp",
+        "filter": [
+          "package.json",
+          "next.config.*",
+          ".next/**/*",
+          "public/**/*",
+          "src/**/*",
+          "node_modules/**/*",
+          ".env.local"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "electron/icon.png",
+      "artifactName": "NostrEHR-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "electron/icon.png",
+      "uninstallerIcon": "electron/icon.png",
+      "installerHeaderIcon": "electron/icon.png",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NostrEHR"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.medical",
+      "icon": "electron/icon.png",
+      "artifactName": "NostrEHR-${version}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office",
+      "icon": "electron/icon.png",
+      "artifactName": "NostrEHR-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "wait-on": "^7.2.0"
+  }
+}

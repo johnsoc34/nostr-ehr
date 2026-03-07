@@ -1,0 +1,37 @@
+[info]
+# The advertised WebSocket URL for your relay
+relay_url = "wss://relay.immutablehealthpediatrics.com/"   # ← CHANGE THIS*
+
+# Human-readable name
+name = "EHR Relay"                # ← CHANGE THIS*
+
+# Description shown to clients
+description = "Private health record relay"
+
+# Your practice Nostr public key (hex format, from the EHR app)
+# Paste your npub's hex value here — found in the Identity tab
+pubkey = "f9cf4e958f4e2e2c035d46cae48bc1868e2b24962c274bb7704c1f15cad9eed9"                           # ← CHANGE THIS (optional now)
+
+# Contact email
+contact = "mailto:immutablehealthpediatrics.library730@aleeas.com"       # ← CHANGE THIS*
+
+[database]
+# SQLite database location
+data_directory = "/home/nostr/data"
+
+[network]
+# Only listen on localhost — Nginx handles external traffic
+address = "0.0.0.0"
+port = 8080
+
+[limits]
+# Maximum event size in bytes (16KB is generous for FHIR resources)
+max_event_bytes = 65536
+
+# Maximum number of tags per event
+max_tags = 50
+
+[authorization]
+pubkey_whitelist = ["482fdb8808ba1a74226140437cbf8e8088fc31029570c50f2fa80a29e5353d96", "3b4d58e0e9f2ffd6e2b426275da3dea10fb0f9311afd4a2437458663b523c87a", "f9cf4e958f4e2e2c035d46cae48bc1868e2b24962c274bb7704c1f15cad9eed9", "afd3cb9e164a5e4ea4388bd07a0364f0c19d39d219c854938c561e3000e5db24", "8bdf175ebadf65d53216b229eb45b28489ccf982866e707943fd51e484c34387", "2c32e121a5e4053f0a927af9c55ca4b0c30e808212b4c28ae471e2609b771cd9", "6c3831e4091fd7609d1881fecc75ad482f122ecd2dcc77e46205463e59c60a7a", "0f5050ea415c02c986d687095a649d05e000fccff5bd0f577d9a0a8b86d24a5f", "63784639a0844b7c339516972688b798d63f6a54aaf61fe68b63a6e152ac30b7", "487fc006ade862442ed0175a0582ebf0e3dbbc6eb29717f042e86a484a201a38", "b22d7769e89dbbf1883065cf5390d06cb4a9778190a8e0bf554cfbf1c3015759", "08c73f25cf631ec6d08c33faa67b0d1aaa384e9f898ee0a3bbf663bfa7385795", "bb85bda7d64e367862fb7d1c7d5817a8a2114b76d51974f2d76907d60b3bcf3d", "f5aa8bc04b8832a5298ec8c5722ee6cf39f8d371bdac8a617fb41ee3846511ba", "87497f3c28b2fbf3e143c858cf2a4e61e9ebd233c4ef44d903c573fca5b12b94", "286cf7307ab4e219099ad2e670d4f65f581c03b6539eee725d104093b97b89b6", "6fdcd3f5980964d24a7541946067692edaa977c27698b9aab5fd14004a774657"]
+nip42_dms = true
+

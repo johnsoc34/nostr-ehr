@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    height: 100vh; -webkit-app-region: drag;
+  }
+  .splash {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 16px;
+    padding: 48px 40px;
+    text-align: center;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+    width: 360px;
+  }
+  .logo {
+    font-size: 36px;
+    margin-bottom: 8px;
+  }
+  .title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #f1f5f9;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 28px;
+  }
+  .loader {
+    width: 120px; height: 3px;
+    background: #1e293b;
+    border-radius: 3px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+  .loader-bar {
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    border-radius: 3px;
+    animation: slide 1.4s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+  .status {
+    font-size: 11px;
+    color: #475569;
+    margin-top: 16px;
+  }
+</style>
+</head>
+<body>
+  <div class="splash">
+    <div class="logo">🩺</div>
+    <div class="title">NostrEHR</div>
+    <div class="subtitle">Sovereign Health Records</div>
+    <div class="loader"><div class="loader-bar"></div></div>
+    <div class="status">Starting server…</div>
+  </div>
+</body>
+</html>

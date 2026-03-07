@@ -1,0 +1,30 @@
+{
+  "name": "immutable-health-billing",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "bip32": "^4.0.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "next": "^16.1.6",
+    "nostr-tools": "^2.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "resend": "^6.9.2",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.0.2",
+    "stripe": "^14.14.0",
+    "tiny-secp256k1": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schedule — NostrEHR</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0d12;
+      --surface:   #111620;
+      --surfaceHi: #1a2233;
+      --border:    #1e2d44;
+      --text:      #e8edf5;
+      --muted:     #6b7fa3;
+      --accent:    #f7931a;
+      --blue:      #3b82f6;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --amber:     #f59e0b;
+      --purple:    #8b5cf6;
+    }
+    :root.light {
+      --bg:        #f4f6fb;
+      --surface:   #ffffff;
+      --surfaceHi: #eef2fa;
+      --border:    #d4dae8;
+      --text:      #0f172a;
+      --muted:     #64748b;
+      --accent:    #f7931a;
+      --blue:      #2563eb;
+      --green:     #16a34a;
+      --red:       #dc2626;
+      --amber:     #d97706;
+      --purple:    #7c3aed;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', 'IBM Plex Sans', system-ui, sans-serif;
+      font-size: 13px;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    #header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #header .logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    #header .logo-mark {
+      width: 30px; height: 30px; border-radius: 7px;
+      background: linear-gradient(135deg, #f7931a, #fbb040);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; color: #fff; font-size: 14px;
+    }
+    #header .logo-text { font-weight: 700; font-size: 14px; }
+    #header .logo-sub  { font-size: 11px; color: var(--muted); }
+    #header .header-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* ── Main layout ── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left sidebar ── */
+    #sidebar {
+      width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+
+    /* ── Mini Calendar ── */
+    #mini-cal {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .cal-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .cal-nav span { font-weight: 700; font-size: 13px; }
+    .cal-nav button {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 16px; padding: 0 4px;
+      line-height: 1;
+    }
+    .cal-nav button:hover { color: var(--text); }
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      gap: 2px; text-align: center;
+    }
+    .cal-grid .dow {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      padding: 2px 0; text-transform: uppercase;
+    }
+    .cal-grid .day {
+      padding: 4px 2px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; line-height: 1.8;
+      transition: background 0.1s;
+    }
+    .cal-grid .day:hover { background: var(--surfaceHi); }
+    .cal-grid .day.other-month { color: var(--border); cursor: default; }
+    .cal-grid .day.other-month:hover { background: none; }
+    .cal-grid .day.today { color: var(--accent); font-weight: 700; }
+    .cal-grid .day.selected {
+      background: var(--accent); color: #fff; font-weight: 700;
+    }
+    .cal-grid .day.has-appts::after {
+      content: ''; display: block; width: 4px; height: 4px;
+      border-radius: 50%; background: var(--blue);
+      margin: 0 auto; margin-top: -4px;
+    }
+    .cal-grid .day.selected.has-appts::after { background: #fff; }
+
+    /* ── Sidebar pending panel ── */
+    #pending-panel {
+      padding: 14px 16px;
+      flex: 1;
+    }
+    #pending-panel h3 {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600; margin-bottom: 10px;
+    }
+    .pending-item {
+      background: var(--surfaceHi); border: 1px solid var(--border);
+      border-left: 3px solid var(--amber); border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+    }
+    .pending-item:hover { border-color: var(--accent); }
+    .pending-item .pi-name { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+    .pending-item .pi-detail { color: var(--muted); font-size: 11px; }
+    .pending-item .pi-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+    /* ── Day Schedule (main) ── */
+    #schedule {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #schedule-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #schedule-header .date-display h2 {
+      font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+    }
+    #schedule-header .date-display p {
+      font-size: 12px; color: var(--muted); margin-top: 2px;
+    }
+    #schedule-header .day-nav {
+      display: flex; gap: 8px; align-items: center;
+    }
+
+    #schedule-body {
+      flex: 1; overflow-y: auto; padding: 20px 24px;
+    }
+
+    /* ── Time slots ── */
+    .time-block {
+      display: flex; gap: 16px; margin-bottom: 4px; min-height: 56px;
+    }
+    .time-label {
+      width: 52px; flex-shrink: 0; text-align: right;
+      color: var(--muted); font-size: 11px; font-weight: 600;
+      padding-top: 4px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .time-slot-area {
+      flex: 1; border-top: 1px solid var(--border);
+      padding: 4px 0; min-height: 56px; position: relative;
+    }
+    .time-slot-area.open-slot {
+      cursor: pointer;
+    }
+    .time-slot-area.open-slot:hover {
+      background: #f7931a08;
+      border-top-color: var(--accent);
+    }
+    .open-slot-hint {
+      display: none; position: absolute; top: 4px; left: 8px;
+      font-size: 11px; color: var(--accent); font-weight: 600;
+    }
+    .time-slot-area.open-slot:hover .open-slot-hint { display: block; }
+
+    /* ── Appointment cards ── */
+    .appt-card {
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 4px;
+      border-left: 3px solid var(--blue);
+      background: var(--surfaceHi);
+      cursor: pointer; transition: all 0.15s;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px;
+    }
+    .appt-card:hover { transform: translateX(2px); border-left-width: 4px; }
+    .appt-card.confirmed { border-left-color: var(--green); }
+    .appt-card.pending   { border-left-color: var(--amber); }
+    .appt-card.cancelled { border-left-color: var(--muted); opacity: 0.5; }
+    .appt-card.declined  { border-left-color: var(--red); opacity: 0.5; }
+
+    .appt-info .appt-name {
+      font-weight: 700; font-size: 13px; margin-bottom: 3px;
+    }
+    .appt-info .appt-detail {
+      font-size: 11px; color: var(--muted); display: flex; gap: 8px;
+    }
+    .appt-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── Type badges ── */
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 99px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .badge-inperson { background: #22c55e20; color: var(--green); }
+    .badge-phone    { background: #3b82f620; color: var(--blue); }
+    .badge-video    { background: #8b5cf620; color: var(--purple); }
+    .badge-pending  { background: #f59e0b20; color: var(--amber); }
+    .badge-confirmed{ background: #22c55e20; color: var(--green); }
+    .badge-cancelled{ background: #6b7fa320; color: var(--muted); }
+    .badge-declined { background: #ef444420; color: var(--red); }
+
+    /* ── Buttons ── */
+    .btn {
+      border: 1px solid var(--border); background: var(--surfaceHi);
+      color: var(--text); border-radius: 7px; padding: 6px 14px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-solid {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .btn-solid:hover { background: #ea7c0a; color: #fff; border-color: #ea7c0a; }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
+    .btn-green { border-color: var(--green); color: var(--green); }
+    .btn-green:hover { background: var(--green); color: #fff; }
+    .btn-red { border-color: var(--red); color: var(--red); }
+    .btn-red:hover { background: var(--red); color: #fff; }
+    .btn-ghost { background: none; border-color: transparent; color: var(--muted); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--border); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px 32px; width: 480px;
+      max-width: 95vw; max-height: 90vh; overflow-y: auto;
+    }
+    .modal h3 { font-size: 16px; font-weight: 800; margin-bottom: 20px; letter-spacing: -0.01em; }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+    /* ── Form elements ── */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      font-weight: 600; margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%; background: var(--surfaceHi);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 12px; color: var(--text); font-size: 13px;
+      font-family: inherit; outline: none;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus { border-color: var(--accent); }
+    .form-group select option { background: var(--surface); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--muted);
+    }
+    .empty-state .icon { font-size: 40px; margin-bottom: 14px; }
+    .empty-state p { font-size: 13px; }
+
+    /* ── Availability manager ── */
+    #avail-panel { padding: 20px 24px; display: none; }
+    #avail-panel h2 { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+    #avail-panel p  { color: var(--muted); font-size: 12px; margin-bottom: 20px; }
+
+    .avail-day {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; margin-bottom: 10px; overflow: hidden;
+    }
+    .avail-day-header {
+      padding: 12px 16px; display: flex; justify-content: space-between;
+      align-items: center; cursor: pointer; user-select: none;
+    }
+    .avail-day-header:hover { background: var(--surfaceHi); }
+    .avail-day-header span { font-weight: 700; font-size: 13px; }
+    .avail-slots {
+      padding: 0 16px 12px; display: none;
+      flex-wrap: wrap; gap: 6px;
+    }
+    .avail-slots.open { display: flex; }
+    .slot-chip {
+      padding: 4px 10px; border-radius: 6px; font-size: 11px;
+      font-weight: 600; cursor: pointer; transition: all 0.15s;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .slot-chip.active {
+      background: #22c55e20; border: 1px solid var(--green); color: var(--green);
+    }
+    .slot-chip.inactive {
+      background: var(--surfaceHi); border: 1px solid var(--border); color: var(--muted);
+    }
+    .slot-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div class="logo">
+    <div class="logo-mark">Ⅰ</div>
+    <div>
+      <div class="logo-text">NostrEHR <span style="color:var(--muted);font-weight:500">Schedule</span></div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-sm" id="theme-toggle" onclick="toggleTheme()" style="font-size:15px;padding:6px 10px">🌙</button>
+    <button class="btn btn-sm" onclick="showView('availability')">⚙ Manage Availability</button>
+    <button class="btn btn-sm btn-solid" onclick="openNewApptModal()">+ New Appointment</button>
+    <a href="/logout" style="text-decoration:none"><button class="btn btn-sm" style="color:var(--muted)">Sign Out</button></a>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- Left Sidebar -->
+  <div id="sidebar">
+
+    <!-- Mini Calendar -->
+    <div id="mini-cal">
+      <div class="cal-nav">
+        <button onclick="changeMonth(-1)">‹</button>
+        <span id="cal-month-label"></span>
+        <button onclick="changeMonth(1)">›</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <!-- Pending Approvals -->
+    <div id="pending-panel">
+      <h3>Pending Approval</h3>
+      <div id="pending-list"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- Day Schedule -->
+  <div id="schedule" style="display:flex">
+
+    <div id="schedule-header">
+      <div class="date-display">
+        <h2 id="selected-date-heading"></h2>
+        <p id="selected-date-sub"></p>
+      </div>
+      <div class="day-nav">
+        <button class="btn btn-sm" onclick="changeDay(-1)">‹ Prev</button>
+        <button class="btn btn-sm" onclick="goToday()">Today</button>
+        <button class="btn btn-sm" onclick="changeDay(1)">Next ›</button>
+      </div>
+    </div>
+
+    <div id="schedule-body"></div>
+
+  </div><!-- /schedule -->
+
+  <!-- Availability Manager (hidden by default) -->
+  <div id="avail-panel">
+    <h2>Manage Availability</h2>
+    <p>Toggle time slots to open or close them for patient self-booking. Changes apply every week.</p>
+    <div id="avail-grid"></div>
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <button class="btn btn-solid" onclick="saveAvailability()">Save Changes</button>
+      <button class="btn" onclick="showView('schedule')">Cancel</button>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- New / Edit Appointment Modal -->
+<div class="modal-overlay" id="appt-modal">
+  <div class="modal">
+    <h3 id="appt-modal-title">New Appointment</h3>
+
+    <div class="form-group">
+      <label>Patient</label>
+      <select id="appt-patient-select" onchange="onPatientSelect(this.value)">
+        <option value="">— Select patient —</option>
+      </select>
+    </div>
+    <input type="hidden" id="appt-patient-npub" />
+    <input type="hidden" id="appt-patient-phone" />
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="appt-date" />
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="appt-type">
+          <option value="in_person">In Person</option>
+          <option value="phone">Phone</option>
+          <option value="video">Video</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="appt-start" step="900" />
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="appt-end" step="900" />
+      </div>
+    </div>
+
+    <div class="form-group" id="video-url-group" style="display:none">
+      <label>Video Link</label>
+      <input type="url" id="appt-video-url" placeholder="https://..." />
+    </div>
+
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="appt-notes" rows="3" placeholder="Chief complaint, visit reason..."></textarea>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('appt-modal')">Cancel</button>
+      <button class="btn btn-solid" onclick="saveAppointment()">Save Appointment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Appointment Detail Modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <h3 id="detail-name"></h3>
+    <div id="detail-body"></div>
+    <div class="modal-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<!-- Override Modal -->
+<div class="modal-overlay" id="override-modal">
+  <div class="modal">
+    <h3 id="override-title">Override Availability</h3>
+    <div class="form-group">
+      <label>Date</label>
+      <input type="date" id="override-date" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="override-start" step="1800" />
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="override-end" step="1800" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Action</label>
+      <select id="override-type">
+        <option value="block">Block (close this slot)</option>
+        <option value="open">Open (add extra slot)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Reason (optional)</label>
+      <input type="text" id="override-reason" placeholder="e.g. Lunch, conference, extra hours" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('override-modal')">Cancel</button>
+      <button class="btn btn-solid" onclick="saveOverride()">Save Override</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = ""; // same origin
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+let selectedDate = new Date();
+selectedDate.setHours(0,0,0,0);
+let calendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+let patients = [];
+let currentApptId = null;
+let templates = [];
+let pendingTemplateChanges = {};
+let monthAppointments = {};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadPatients();
+  renderMiniCalendar();
+  await loadMonthData();
+  renderDay(selectedDate);
+  await loadPending();
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function loadPatients() {
+  try {
+    const res = await fetch("/api/proxy/patients");
+    if (res.ok) {
+      patients = await res.json();
+      const sel = document.getElementById("appt-patient-select");
+      patients.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.npub;
+        opt.textContent = p.name;
+        opt.dataset.phone = p.phone || "";
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) { console.warn("Could not load patients from billing API"); }
+}
+
+async function loadMonthData() {
+  const y = calendarMonth.getFullYear();
+  const m = String(calendarMonth.getMonth()+1).padStart(2,"0");
+  const start = `${y}-${m}-01`;
+  const lastDay = new Date(y, calendarMonth.getMonth()+1, 0).getDate();
+  const end = `${y}-${m}-${String(lastDay).padStart(2,"0")}`;
+  try {
+    const res = await fetch(`${API}/api/appointments?start=${start}&end=${end}`);
+    const appts = await res.json();
+    monthAppointments = {};
+    appts.forEach(a => {
+      if (!monthAppointments[a.date]) monthAppointments[a.date] = [];
+      monthAppointments[a.date].push(a);
+    });
+  } catch(e) { console.error(e); }
+}
+
+async function loadPending() {
+  try {
+    const now = new Date();
+    const start = dateStr(now);
+    const future = new Date(now); future.setDate(future.getDate()+30);
+    const end = dateStr(future);
+    const res = await fetch(`${API}/api/appointments?start=${start}&end=${end}`);
+    const appts = await res.json();
+    const pending = appts.filter(a => a.status === "pending");
+    const el = document.getElementById("pending-list");
+    if (pending.length === 0) {
+      el.innerHTML = `<div style="color:var(--muted);font-size:12px">No pending requests</div>`;
+      return;
+    }
+    el.innerHTML = pending.map(a => `
+      <div class="pending-item" onclick="showDetail(${a.id})">
+        <div class="pi-name">${esc(a.patient_name)}</div>
+        <div class="pi-detail">${fmtDate(a.date)} · ${fmtTime(a.start_time)} · ${typeLabel(a.appt_type)}</div>
+        <div class="pi-actions">
+          <button class="btn btn-sm btn-green" onclick="event.stopPropagation();quickStatus(${a.id},'confirmed')">✓ Confirm</button>
+          <button class="btn btn-sm btn-red" onclick="event.stopPropagation();quickStatus(${a.id},'declined')">✗ Decline</button>
+        </div>
+      </div>
+    `).join("");
+  } catch(e) { console.error(e); }
+}
+
+// ── Mini Calendar ─────────────────────────────────────────────────────────────
+function renderMiniCalendar() {
+  const y = calendarMonth.getFullYear();
+  const m = calendarMonth.getMonth();
+  document.getElementById("cal-month-label").textContent = `${MONTHS[m]} ${y}`;
+
+  const grid = document.getElementById("cal-grid");
+  grid.innerHTML = DAYS_SHORT.map(d => `<div class="dow">${d[0]}</div>`).join("");
+
+  const firstDay = new Date(y, m, 1);
+  let startDow = (firstDay.getDay() + 6) % 7; // Mon=0
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const daysInPrev = new Date(y, m, 0).getDate();
+
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Prev month fill
+  for (let i = startDow - 1; i >= 0; i--) {
+    grid.innerHTML += `<div class="day other-month">${daysInPrev - i}</div>`;
+  }
+
+  // Current month
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(y, m, d);
+    const ds = dateStr(date);
+    const isToday = date.getTime() === today.getTime();
+    const isSel = date.getTime() === selectedDate.getTime();
+    const hasAppts = monthAppointments[ds] && monthAppointments[ds].length > 0;
+    const classes = ["day",
+      isToday && !isSel ? "today" : "",
+      isSel ? "selected" : "",
+      hasAppts ? "has-appts" : "",
+    ].filter(Boolean).join(" ");
+    grid.innerHTML += `<div class="${classes}" onclick="selectDate(new Date(${y},${m},${d}))">${d}</div>`;
+  }
+
+  // Next month fill
+  const totalCells = startDow + daysInMonth;
+  const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (let d = 1; d <= remaining; d++) {
+    grid.innerHTML += `<div class="day other-month">${d}</div>`;
+  }
+}
+
+function changeMonth(dir) {
+  calendarMonth.setMonth(calendarMonth.getMonth() + dir);
+  loadMonthData().then(renderMiniCalendar);
+}
+
+function selectDate(date) {
+  selectedDate = date;
+  selectedDate.setHours(0,0,0,0);
+  renderMiniCalendar();
+  renderDay(selectedDate);
+  showView("schedule");
+}
+
+function changeDay(dir) {
+  const d = new Date(selectedDate);
+  d.setDate(d.getDate() + dir);
+  selectDate(d);
+}
+
+function goToday() {
+  const t = new Date(); t.setHours(0,0,0,0);
+  calendarMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+  selectDate(t);
+}
+
+// ── Day Schedule ──────────────────────────────────────────────────────────────
+async function renderDay(date) {
+  const ds = dateStr(date);
+  const dow = (date.getDay() + 6) % 7;
+  const isWeekend = dow >= 5;
+
+  // Update heading
+  document.getElementById("selected-date-heading").textContent =
+    date.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+  const apptCount = monthAppointments[ds]?.length || 0;
+  document.getElementById("selected-date-sub").textContent =
+    isWeekend ? "Weekend — office closed" :
+    apptCount > 0 ? `${apptCount} appointment${apptCount>1?"s":""}` : "No appointments scheduled";
+
+  const body = document.getElementById("schedule-body");
+
+  if (isWeekend) {
+    body.innerHTML = `<div class="empty-state"><div class="icon">🏖️</div><p>Weekend — office closed</p><p style="margin-top:8px"><button class="btn btn-sm" onclick="openNewApptModal('${ds}')">Schedule anyway</button></p></div>`;
+    return;
+  }
+
+  // Load appointments and available slots
+  let [appts, slots] = await Promise.all([
+    fetch(`${API}/api/appointments?date=${ds}`).then(r=>r.json()).catch(()=>[]),
+    fetch(`${API}/api/availability/${ds}`).then(r=>r.json()).catch(()=>[])
+  ]);
+
+  // Update month cache
+  monthAppointments[ds] = appts;
+
+  if (appts.length === 0 && slots.length === 0) {
+    body.innerHTML = `<div class="empty-state"><div class="icon">📅</div><p>No appointments today</p><p style="margin-top:8px"><button class="btn btn-sm btn-solid" onclick="openNewApptModal('${ds}')">+ New Appointment</button></p></div>`;
+    return;
+  }
+
+  // Build time blocks from 9am to 4pm
+  const apptsByTime = {};
+  appts = appts.filter(a => a.status !== 'cancelled' && a.status !== 'declined');
+  appts.forEach(a => { apptsByTime[a.start_time] = a; });
+  const slotsByTime = {};
+  slots.forEach(s => { slotsByTime[s.start_time] = s; });
+
+  // All times to show
+  const allTimes = new Set([
+    ...Object.keys(apptsByTime),
+    ...Object.keys(slotsByTime)
+  ]);
+  const sortedTimes = [...allTimes].sort();
+
+  body.innerHTML = sortedTimes.map(time => {
+    const appt = apptsByTime[time];
+    const slot = slotsByTime[time];
+
+    let inner = "";
+    if (appt) {
+      inner = apptCardHtml(appt);
+    } else if (slot) {
+      inner = `
+        <div class="time-slot-area open-slot" onclick="openNewApptModal('${ds}','${time}')">
+          <span class="open-slot-hint">+ Book this slot</span>
+        </div>`;
+    } else {
+      inner = `<div class="time-slot-area"></div>`;
+    }
+
+    return `
+      <div class="time-block">
+        <div class="time-label">${fmtTime(time)}</div>
+        <div style="flex:1">${inner}</div>
+      </div>`;
+  }).join("");
+}
+
+function apptCardHtml(a) {
+  const typeBadge = `<span class="badge badge-${a.appt_type==="in_person"?"inperson":a.appt_type}">${typeLabel(a.appt_type)}</span>`;
+  const statusBadge = `<span class="badge badge-${a.status}">${a.status}</span>`;
+  return `
+    <div class="appt-card ${a.status}" onclick="showDetail(${a.id})">
+      <div class="appt-info">
+        <div class="appt-name">${esc(a.patient_name)}</div>
+        <div class="appt-detail">
+          ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}
+          &nbsp;${typeBadge}&nbsp;${statusBadge}
+          ${a.notes ? `<span style="color:var(--muted)">· ${esc(a.notes.substring(0,40))}${a.notes.length>40?"…":""}</span>` : ""}
+        </div>
+      </div>
+      <div class="appt-actions">
+        ${a.status==="pending" ? `
+          <button class="btn btn-sm btn-green" onclick="event.stopPropagation();quickStatus(${a.id},'confirmed')">✓</button>
+          <button class="btn btn-sm btn-red" onclick="event.stopPropagation();quickStatus(${a.id},'declined')">✗</button>
+        ` : ""}
+        <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();editAppt(${a.id})">Edit</button>
+      </div>
+    </div>`;
+}
+
+// ── Appointment Detail ────────────────────────────────────────────────────────
+async function showDetail(id) {
+  currentApptId = id;
+  try {
+    const a = await fetch(`${API}/api/appointments/${id}`).then(r=>r.json());
+    document.getElementById("detail-name").textContent = a.patient_name;
+    document.getElementById("detail-body").innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Date</div><div style="font-weight:600">${fmtDate(a.date)}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Time</div><div style="font-weight:600">${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Type</div><div><span class="badge badge-${a.appt_type==="in_person"?"inperson":a.appt_type}">${typeLabel(a.appt_type)}</span></div></div>
+        <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Status</div><div><span class="badge badge-${a.status}">${a.status}</span></div></div>
+      </div>
+      ${a.notes ? `<div style="background:var(--surfaceHi);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.6;margin-bottom:12px">${esc(a.notes)}</div>` : ""}
+      ${a.video_url ? `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Video Link: <a href="${esc(a.video_url)}" target="_blank" style="color:var(--blue)">${esc(a.video_url)}</a></div>` : ""}
+      ${a.patient_phone ? `<div style="font-size:12px;color:var(--muted)">Phone: ${esc(a.patient_phone)}</div>` : ""}
+    `;
+    document.getElementById("detail-footer").innerHTML = `
+      ${a.status==="pending" ? `
+        <button class="btn btn-green" onclick="quickStatus(${a.id},'confirmed');closeModal('detail-modal')">✓ Confirm</button>
+        <button class="btn btn-red" onclick="quickStatus(${a.id},'declined');closeModal('detail-modal')">✗ Decline</button>
+      ` : ""}
+      ${a.status==="confirmed" ? `
+        <button class="btn btn-red" onclick="quickStatus(${a.id},'cancelled');closeModal('detail-modal')">Cancel Appointment</button>
+      ` : ""}
+      <button class="btn" onclick="editAppt(${a.id});closeModal('detail-modal')">✏ Edit</button>
+      <button class="btn" style="border-color:#8b5cf6;color:#8b5cf6" onclick="openPatientChart('${a.patient_npub}');closeModal('detail-modal')">📋 Open Chart</button>
+      <button class="btn btn-ghost" onclick="closeModal('detail-modal')">Close</button>
+    `;
+    document.getElementById("detail-modal").classList.add("open");
+  } catch(e) { console.error(e); }
+}
+
+// ── New / Edit Appointment ────────────────────────────────────────────────────
+function openNewApptModal(date, time) {
+  currentApptId = null;
+  document.getElementById("appt-modal-title").textContent = "New Appointment";
+  document.getElementById("appt-patient-select").value = "";
+  document.getElementById("appt-date").value = date || dateStr(selectedDate);
+  document.getElementById("appt-start").value = time || "09:00";
+  document.getElementById("appt-end").value = time ? addMinutes(time,30) : "09:30";
+  document.getElementById("appt-type").value = "in_person";
+  document.getElementById("appt-notes").value = "";
+  document.getElementById("appt-video-url").value = "";
+  document.getElementById("video-url-group").style.display = "none";
+  document.getElementById("appt-modal").classList.add("open");
+}
+
+async function editAppt(id) {
+  currentApptId = id;
+  try {
+    const a = await fetch(`${API}/api/appointments/${id}`).then(r=>r.json());
+    document.getElementById("appt-modal-title").textContent = "Edit Appointment";
+    document.getElementById("appt-patient-select").value = a.patient_npub;
+    document.getElementById("appt-patient-npub").value = a.patient_npub;
+    document.getElementById("appt-date").value = a.date;
+    document.getElementById("appt-start").value = a.start_time;
+    document.getElementById("appt-end").value = a.end_time;
+    document.getElementById("appt-type").value = a.appt_type;
+    document.getElementById("appt-notes").value = a.notes || "";
+    document.getElementById("appt-video-url").value = a.video_url || "";
+    document.getElementById("video-url-group").style.display = a.appt_type==="video"?"block":"none";
+    document.getElementById("appt-modal").classList.add("open");
+  } catch(e) { console.error(e); }
+}
+
+function onPatientSelect(npub) {
+  const opt = document.querySelector(`#appt-patient-select option[value="${npub}"]`);
+  document.getElementById("appt-patient-npub").value = npub;
+  document.getElementById("appt-patient-phone").value = opt ? opt.dataset.phone : "";
+}
+
+document.getElementById("appt-type").addEventListener("change", function() {
+  document.getElementById("video-url-group").style.display = this.value==="video"?"block":"none";
+});
+
+async function saveAppointment() {
+  const npub  = document.getElementById("appt-patient-npub").value ||
+                document.getElementById("appt-patient-select").value;
+  const name  = document.querySelector(`#appt-patient-select option[value="${npub}"]`)?.textContent;
+  const phone = document.getElementById("appt-patient-phone").value;
+  const date  = document.getElementById("appt-date").value;
+  const start = document.getElementById("appt-start").value;
+  const end   = document.getElementById("appt-end").value;
+  const type  = document.getElementById("appt-type").value;
+  const notes = document.getElementById("appt-notes").value;
+  const videoUrl = document.getElementById("appt-video-url").value;
+
+  if (!npub || !name || !date || !start || !end) {
+    alert("Please fill in all required fields"); return;
+  }
+
+  try {
+    if (currentApptId) {
+      await fetch(`${API}/api/appointments/${currentApptId}`, {
+        method: "PUT",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ date, start_time:start, end_time:end, appt_type:type, notes, video_url:videoUrl, status:"confirmed" })
+      });
+    } else {
+      await fetch(`${API}/api/appointments`, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({
+          patient_npub:npub, patient_name:name, patient_phone:phone||null,
+          date, start_time:start, end_time:end, appt_type:type,
+          notes, video_url:videoUrl, force:true
+        })
+      });
+    }
+    closeModal("appt-modal");
+    await loadMonthData();
+    renderMiniCalendar();
+    renderDay(selectedDate);
+    await loadPending();
+  } catch(e) { alert("Error saving appointment: " + e.message); }
+}
+
+async function quickStatus(id, status) {
+  try {
+    await fetch(`${API}/api/appointments/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ status })
+    });
+    await loadMonthData();
+    renderMiniCalendar();
+    renderDay(selectedDate);
+    await loadPending();
+  } catch(e) { console.error(e); }
+}
+
+// ── Availability Manager ──────────────────────────────────────────────────────
+async function showView(view) {
+  document.getElementById("schedule").style.display = view==="schedule"?"flex":"none";
+  document.getElementById("avail-panel").style.display = view==="availability"?"block":"none";
+  if (view==="availability") await renderAvailabilityManager();
+}
+
+async function renderAvailabilityManager() {
+  templates = await fetch(`${API}/api/availability/templates`).then(r=>r.json());
+  pendingTemplateChanges = {};
+  const grid = document.getElementById("avail-grid");
+
+  // Build 30-min slots for 9am-4pm
+  const allSlots = [];
+  for (let h=9; h<16; h++) {
+    for (let m=0; m<60; m+=30) {
+      allSlots.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+    }
+  }
+
+  grid.innerHTML = DAYS.slice(0,5).map((day, idx) => {
+    const dayTemplates = templates.filter(t => t.day_of_week === idx);
+    const activeSlots = new Set(dayTemplates.map(t => t.start_time));
+
+    const chips = allSlots.map(t => {
+      const isActive = activeSlots.has(t);
+      return `<div class="slot-chip ${isActive?"active":"inactive"}"
+        data-day="${idx}" data-time="${t}" data-active="${isActive}"
+        onclick="toggleSlot(this)">${fmtTime(t)}</div>`;
+    }).join("");
+
+    return `
+      <div class="avail-day">
+        <div class="avail-day-header" onclick="toggleDayPanel(this)">
+          <span>${day}</span>
+          <span style="color:var(--muted);font-size:11px">${dayTemplates.length} slots open ›</span>
+        </div>
+        <div class="avail-slots">${chips}</div>
+      </div>`;
+  }).join("");
+}
+
+function toggleDayPanel(header) {
+  const slots = header.nextElementSibling;
+  slots.classList.toggle("open");
+  header.querySelector("span:last-child").textContent =
+    slots.classList.contains("open") ? "collapse ↑" :
+    `${slots.querySelectorAll(".slot-chip.active").length} slots open ›`;
+}
+
+function toggleSlot(chip) {
+  const day = parseInt(chip.dataset.day);
+  const time = chip.dataset.time;
+  const isActive = chip.dataset.active === "true";
+  chip.dataset.active = !isActive;
+  chip.classList.toggle("active", !isActive);
+  chip.classList.toggle("inactive", isActive);
+  if (!pendingTemplateChanges[day]) pendingTemplateChanges[day] = {};
+  pendingTemplateChanges[day][time] = !isActive;
+}
+
+async function saveAvailability() {
+  // Delete all existing templates for changed days, then re-insert active ones
+  const allSlots = [];
+  for (let h=9; h<16; h++) for (let m=0; m<60; m+=30)
+    allSlots.push({ s: `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`,
+                    e: m===30?`${String(h+1).padStart(2,"0")}:00`:`${String(h).padStart(2,"0")}:30` });
+
+  for (const [dayStr, changes] of Object.entries(pendingTemplateChanges)) {
+    const day = parseInt(dayStr);
+    // Delete old templates for this day
+    const toDelete = templates.filter(t => t.day_of_week === day);
+    for (const t of toDelete) {
+      await fetch(`${API}/api/availability/templates/${t.id}`, { method:"DELETE" });
+    }
+    // Get current state for this day by reading all chips
+    const chips = document.querySelectorAll(`.slot-chip[data-day="${day}"]`);
+    for (const chip of chips) {
+      if (chip.dataset.active === "true") {
+        const slot = allSlots.find(s => s.s === chip.dataset.time);
+        if (slot) {
+          await fetch(`${API}/api/availability/templates`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ day_of_week:day, start_time:slot.s, end_time:slot.e, duration_min:30 })
+          });
+        }
+      }
+    }
+  }
+  alert("Availability saved!");
+  showView("schedule");
+  loadMonthData().then(renderMiniCalendar);
+}
+
+// ── Override ──────────────────────────────────────────────────────────────────
+function openOverrideModal(date) {
+  document.getElementById("override-date").value = date || dateStr(selectedDate);
+  document.getElementById("override-start").value = "09:00";
+  document.getElementById("override-end").value = "09:30";
+  document.getElementById("override-type").value = "block";
+  document.getElementById("override-reason").value = "";
+  document.getElementById("override-modal").classList.add("open");
+}
+
+async function saveOverride() {
+  const date  = document.getElementById("override-date").value;
+  const start = document.getElementById("override-start").value;
+  const end   = document.getElementById("override-end").value;
+  const type  = document.getElementById("override-type").value;
+  const reason= document.getElementById("override-reason").value;
+  try {
+    await fetch(`${API}/api/availability/overrides`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ date, start_time:start, end_time:end, override_type:type, reason })
+    });
+    closeModal("override-modal");
+    renderDay(selectedDate);
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function dateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function fmtTime(t) {
+  const [h,m] = t.split(":").map(Number);
+  return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
+}
+function fmtDate(ds) {
+  const d = new Date(ds+"T00:00:00");
+  return d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+}
+function typeLabel(t) {
+  return {in_person:"In Person",phone:"Phone",video:"Video"}[t]||t;
+}
+function addMinutes(time, mins) {
+  const [h,m] = time.split(":").map(Number);
+  const total = h*60+m+mins;
+  return `${String(Math.floor(total/60)%24).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`;
+}
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove("open");
+}
+
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  document.getElementById('theme-toggle').textContent = isLight ? '☀️' : '🌙';
+  localStorage.setItem('cal_theme', isLight ? 'light' : 'dark');
+}
+
+// Apply saved theme on load
+(function() {
+  if (localStorage.getItem('cal_theme') === 'light') {
+    document.documentElement.classList.add('light');
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.textContent = '☀️';
+  }
+})();
+
+function openPatientChart(npub) {
+  // Post message to EHR parent window to navigate to patient chart
+  window.parent.postMessage({ type: 'open-patient-chart', npub }, '*');
+  // Fallback: if opened directly, do nothing
+}
+
+init();
+</script>
+</body>
+</html>

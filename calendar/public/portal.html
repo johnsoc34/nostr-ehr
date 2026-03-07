@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Appointments — NostrEHR</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0d12; --surface: #111620; --surfaceHi: #1a2233;
+      --border: #1e2d44; --text: #e8edf5; --muted: #6b7fa3;
+      --accent: #3b82f6; --green: #22c55e; --red: #ef4444;
+      --amber: #f59e0b; --purple: #8b5cf6;
+    }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'DM Sans', system-ui, sans-serif; font-size: 14px;
+      min-height: 100vh;
+    }
+    .container { max-width: 680px; margin: 0 auto; padding: 24px 16px; }
+    h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--surface); border-radius: 10px; padding: 4px; }
+    .tab { flex: 1; padding: 8px; border-radius: 7px; border: none; background: none; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .tab.active { background: var(--surfaceHi); color: var(--text); }
+
+    /* Cards */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 12px; }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .card-title { font-weight: 700; font-size: 15px; }
+    .card-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+    /* Badges */
+    .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; text-transform: uppercase; }
+    .badge-confirmed { background: #22c55e20; color: var(--green); }
+    .badge-pending   { background: #f59e0b20; color: var(--amber); }
+    .badge-cancelled { background: #6b7fa320; color: var(--muted); }
+    .badge-declined  { background: #ef444420; color: var(--red); }
+    .badge-inperson  { background: #22c55e15; color: var(--green); }
+    .badge-phone     { background: #3b82f615; color: var(--accent); }
+    .badge-video     { background: #8b5cf615; color: var(--purple); }
+
+    /* Buttons */
+    .btn { border: 1px solid var(--border); background: var(--surfaceHi); color: var(--text); border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .15s; }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn-danger { border-color: var(--red); color: var(--red); }
+    .btn-danger:hover { background: var(--red); color: #fff; }
+    .btn-full { width: 100%; }
+
+    /* Mini calendar */
+    .mini-cal { margin-bottom: 20px; }
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .cal-nav span { font-weight: 700; }
+    .cal-nav button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0 6px; }
+    .cal-nav button:hover { color: var(--text); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; text-align: center; }
+    .cal-grid .dow { font-size: 10px; color: var(--muted); font-weight: 600; padding: 3px 0; text-transform: uppercase; }
+    .cal-grid .day { padding: 6px 2px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+    .cal-grid .day:hover { background: var(--surfaceHi); }
+    .cal-grid .day.other { color: var(--border); cursor: default; }
+    .cal-grid .day.other:hover { background: none; }
+    .cal-grid .day.today { color: var(--accent); font-weight: 700; }
+    .cal-grid .day.selected { background: var(--accent); color: #fff; font-weight: 700; }
+    .cal-grid .day.has-slots::after { content:''; display:block; width:4px; height:4px; border-radius:50%; background:var(--green); margin:0 auto; margin-top:-3px; }
+    .cal-grid .day.selected.has-slots::after { background:#fff; }
+    .cal-grid .day.weekend { color: var(--muted); cursor: default; }
+    .cal-grid .day.weekend:hover { background: none; }
+    .cal-grid .day.past { color: var(--border); cursor: default; }
+    .cal-grid .day.past:hover { background: none; }
+
+    /* Slot picker */
+    .slot-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 16px; }
+    .slot-btn { padding: 10px 8px; border-radius: 8px; border: 1px solid var(--green); background: #22c55e15; color: var(--green); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .15s; text-align: center; }
+    .slot-btn:hover, .slot-btn.selected { background: var(--green); color: #fff; }
+
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; margin-bottom: 6px; }
+    .form-group select, .form-group textarea, .form-group input {
+      width: 100%; background: var(--surfaceHi); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px;
+      font-family: inherit; outline: none;
+    }
+    .form-group select:focus, .form-group textarea:focus, .form-group input:focus { border-color: var(--accent); }
+    .form-group select option { background: var(--surface); }
+
+    .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+    .empty .icon { font-size: 36px; margin-bottom: 12px; }
+
+    /* Detail rows */
+    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row .label { color: var(--muted); }
+
+    /* Steps */
+    .step { display: none; }
+    .step.active { display: block; }
+    .step-indicator { display: flex; gap: 6px; margin-bottom: 20px; }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+    .step-dot.active { background: var(--accent); }
+    .step-dot.done { background: var(--green); }
+
+    .info-box { background: #3b82f610; border: 1px solid #3b82f625; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+    .info-box strong { color: var(--accent); }
+
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📅 Appointments</h1>
+  <p class="subtitle">Schedule and manage your visits with NostrEHR</p>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('upcoming')">Upcoming</button>
+    <button class="tab" onclick="showTab('book')">Book a Visit</button>
+    <button class="tab" onclick="showTab('history')">Past Visits</button>
+  </div>
+
+  <!-- Upcoming -->
+  <div id="tab-upcoming" class="step active">
+    <div id="upcoming-list"><div class="empty"><div class="icon">⏳</div><p>Loading...</p></div></div>
+  </div>
+
+  <!-- Book -->
+  <div id="tab-book" style="display:none">
+
+    <!-- Step indicators -->
+    <div class="step-indicator">
+      <div class="step-dot active" id="dot-1"></div>
+      <div class="step-dot" id="dot-2"></div>
+      <div class="step-dot" id="dot-3"></div>
+    </div>
+
+    <!-- Step 1: Pick date -->
+    <div id="book-step-1">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:4px">Select a Date</div>
+        <div class="card-sub" style="margin-bottom:16px">Dates with available slots are marked with a green dot</div>
+        <div class="cal-nav">
+          <button onclick="bookChangeMonth(-1)">‹</button>
+          <span id="book-month-label"></span>
+          <button onclick="bookChangeMonth(1)">›</button>
+        </div>
+        <div class="cal-grid" id="book-cal-grid"></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Pick time + type -->
+    <div id="book-step-2" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title" id="book-date-label">Select a Time</div>
+            <div class="card-sub">Choose an available slot</div>
+          </div>
+          <button class="btn btn-sm" onclick="bookGoStep(1)">‹ Back</button>
+        </div>
+        <div id="book-slots"></div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="form-group">
+          <label>Visit Type</label>
+          <select id="book-type">
+            <option value="in_person">In Person</option>
+            <option value="phone">Phone Call</option>
+            <option value="video">Video Visit</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Phone Number (for reminders)</label>
+          <input type="tel" id="book-phone" placeholder="(555) 555-5555" />
+        </div>
+        <div class="form-group">
+          <label>Reason for Visit</label>
+          <textarea id="book-notes" rows="3" placeholder="Briefly describe your reason for visiting..."></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="bookGoStep(3)">Review Appointment →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Confirm -->
+    <div id="book-step-3" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Confirm Appointment</div>
+          <button class="btn btn-sm" onclick="bookGoStep(2)">‹ Back</button>
+        </div>
+        <div id="book-summary"></div>
+        <div class="info-box" style="margin-top:16px">
+          <strong>📋 Please note:</strong> This appointment request will be confirmed automatically if you selected an available slot, or sent to our team for approval if the time is outside normal availability.
+        </div>
+        <button class="btn btn-primary btn-full" onclick="confirmBooking()">Confirm Booking</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Success -->
+    <div id="book-step-4" style="display:none">
+      <div class="card" style="text-align:center;padding:40px 20px">
+        <div style="font-size:48px;margin-bottom:16px" id="book-success-icon">✅</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px" id="book-success-title">Appointment Confirmed!</div>
+        <div style="color:var(--muted);font-size:13px;margin-bottom:24px" id="book-success-sub"></div>
+        <button class="btn btn-primary" onclick="showTab('upcoming')">View My Appointments</button>
+      </div>
+    </div>
+
+  </div><!-- /tab-book -->
+
+  <!-- History -->
+  <div id="tab-history" style="display:none">
+    <div id="history-list"><div class="empty"><div class="icon">⏳</div><p>Loading...</p></div></div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+const API = ""; // same origin — served from calendar service
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+// Patient identity comes from the parent portal via postMessage or URL param
+let patientNpub = null;
+let patientName = "Patient";
+
+// Booking state
+let bookMonth = new Date(); bookMonth.setDate(1); bookMonth.setHours(0,0,0,0);
+let bookSelectedDate = null;
+let bookSelectedSlot = null;
+let bookAvailCache = {}; // date -> slots[]
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener("message", (e) => {
+  console.log("[portal] message received:", e.data?.type, e.origin);
+  if (e.data?.type === "patient-identity") {
+    patientNpub = e.data.npub;
+    patientName = e.data.name || "Patient";
+    console.log("[portal] identity set:", patientNpub, patientName);
+    loadUpcoming();
+    loadHistory();
+  }
+});
+
+// Support URL params for direct testing
+// Read URL params (works both direct and iframe)
+function initFromUrl() {
+  const params = new URLSearchParams(location.search);
+  console.log("[portal] URL:", location.href, "npub param:", params.get("npub"));
+  if (params.get("npub")) {
+    patientNpub = params.get("npub");
+    patientName = decodeURIComponent(params.get("name") || "Patient");
+    loadUpcoming();
+    loadHistory();
+  }
+}
+// Run immediately and also on load to catch both cases
+initFromUrl();
+window.addEventListener("load", initFromUrl);
+
+// Request identity from parent on load (in case postMessage already fired)
+window.addEventListener("load", () => {
+  // Ask parent to re-send identity in case we missed the first message
+  window.parent.postMessage({ type: "portal-ready" }, "*");
+  // Fallback: show empty state after 5s if no identity received
+  setTimeout(() => {
+    if (!patientNpub) {
+      document.getElementById("upcoming-list").innerHTML = 
+        "<div class='empty'><div class='icon'>📅</div><p>No upcoming appointments</p><p style='margin-top:12px'><button class='btn btn-primary' onclick='showTab(\"book\")'>Book a Visit</button></p></div>";
+      document.getElementById("history-list").innerHTML = 
+        "<div class='empty'><div class='icon'>🗂️</div><p>No past appointments</p></div>";
+    }
+  }, 5000);
+});
+
+function showTab(tab) {
+  ["upcoming","book","history"].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t===tab?"block":"none";
+    document.querySelectorAll(".tab").forEach((el,i) => {
+      el.classList.toggle("active", ["upcoming","book","history"][i]===tab);
+    });
+  });
+  if (tab === "book") {
+    bookGoStep(1);
+    renderBookCalendar();
+  }
+}
+
+// ── Upcoming appointments ─────────────────────────────────────────────────────
+async function loadUpcoming() {
+  if (!patientNpub) return;
+  try {
+    const appts = await fetch(`${API}/api/appointments/patient/${encodeURIComponent(patientNpub)}`).then(r=>r.json());
+    const upcoming = appts.filter(a => a.status !== "cancelled" && a.status !== "declined");
+    const el = document.getElementById("upcoming-list");
+    if (upcoming.length === 0) {
+      el.innerHTML = `<div class="empty"><div class="icon">📅</div><p>No upcoming appointments</p><p style="margin-top:12px"><button class="btn btn-primary" onclick="showTab('book')">Book a Visit</button></p></div>`;
+      return;
+    }
+    el.innerHTML = upcoming.map(a => apptCard(a, true)).join("");
+  } catch(e) { console.error(e); }
+}
+
+async function loadHistory() {
+  if (!patientNpub) return;
+  try {
+    const appts = await fetch(`${API}/api/appointments/patient/${encodeURIComponent(patientNpub)}`).then(r=>r.json());
+    const past = appts.filter(a => a.status === "cancelled" || a.status === "declined");
+    const el = document.getElementById("history-list");
+    if (past.length === 0) {
+      el.innerHTML = `<div class="empty"><div class="icon">🗂️</div><p>No past appointments</p></div>`;
+      return;
+    }
+    el.innerHTML = past.map(a => apptCard(a, false)).join("");
+  } catch(e) { console.error(e); }
+}
+
+function apptCard(a, showActions) {
+  const typeLabel = {in_person:"In Person",phone:"Phone",video:"Video"}[a.appt_type]||a.appt_type;
+  const typeCls = a.appt_type==="in_person"?"inperson":a.appt_type;
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">${fmtDate(a.date)}</div>
+          <div class="card-sub">${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="badge badge-${typeCls}">${typeLabel}</span>
+          <span class="badge badge-${a.status}">${a.status}</span>
+        </div>
+      </div>
+      ${a.notes ? `<div style="color:var(--muted);font-size:13px;margin-bottom:12px">${esc(a.notes)}</div>` : ""}
+      ${a.video_url && a.status==="confirmed" ? `<div style="margin-bottom:12px"><a href="${esc(a.video_url)}" target="_blank" class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)">🎥 Join Video Visit</a></div>` : ""}
+      ${showActions && (a.status==="confirmed"||a.status==="pending") ? `
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-danger" onclick="cancelAppt(${a.id})">Cancel</button>
+        </div>` : ""}
+    </div>`;
+}
+
+async function cancelAppt(id) {
+  if (!confirm("Cancel this appointment?")) return;
+  try {
+    await fetch(`${API}/api/appointments/${id}/status`, {
+      method:"PATCH", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ status:"cancelled" })
+    });
+    loadUpcoming();
+    loadHistory();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+// ── Booking flow ──────────────────────────────────────────────────────────────
+function bookGoStep(step) {
+  [1,2,3,4].forEach(s => {
+    const el = document.getElementById(`book-step-${s}`);
+    if (el) el.style.display = s===step?"block":"none";
+  });
+  [1,2,3].forEach(s => {
+    const dot = document.getElementById(`dot-${s}`);
+    if (dot) {
+      dot.classList.toggle("active", s===step);
+      dot.classList.toggle("done", s<step);
+    }
+  });
+  if (step===3) renderBookSummary();
+}
+
+async function renderBookCalendar() {
+  const y = bookMonth.getFullYear();
+  const m = bookMonth.getMonth();
+  document.getElementById("book-month-label").textContent = `${MONTHS[m]} ${y}`;
+
+  const grid = document.getElementById("book-cal-grid");
+  grid.innerHTML = DAYS_SHORT.map(d => `<div class="dow">${d[0]}</div>`).join("");
+
+  const firstDay = new Date(y, m, 1);
+  const startDow = (firstDay.getDay()+6)%7;
+  const daysInMonth = new Date(y,m+1,0).getDate();
+  const daysInPrev  = new Date(y,m,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Prefetch availability for whole month
+  const start = `${y}-${String(m+1).padStart(2,"0")}-01`;
+  const end   = `${y}-${String(m+1).padStart(2,"0")}-${String(daysInMonth).padStart(2,"0")}`;
+  try {
+    const res = await fetch(`${API}/api/availability/month?start=${start}&end=${end}`).catch(()=>null);
+    // If month endpoint doesn't exist, we'll check per-day lazily via dots
+  } catch(e) {}
+
+  for (let i=startDow-1;i>=0;i--)
+    grid.innerHTML += `<div class="day other">${daysInPrev-i}</div>`;
+
+  for (let d=1;d<=daysInMonth;d++) {
+    const date = new Date(y,m,d);
+    const ds = dateStr(date);
+    const dow = (date.getDay()+6)%7;
+    const isPast = date < today;
+    const isWeekend = dow >= 5;
+    const isSel = bookSelectedDate === ds;
+    const hasDot = bookAvailCache[ds] && bookAvailCache[ds].length > 0;
+
+    let cls = "day";
+    if (isPast || isWeekend) cls += isPast?" past":" weekend";
+    else {
+      if (isSel) cls += " selected";
+      if (hasDot) cls += " has-slots";
+    }
+    const onclick = (!isPast && !isWeekend) ? `onclick="bookSelectDate('${ds}')"` : "";
+    grid.innerHTML += `<div class="${cls}" ${onclick}>${d}</div>`;
+  }
+
+  const total = startDow+daysInMonth;
+  const rem = total%7===0?0:7-(total%7);
+  for (let d=1;d<=rem;d++) grid.innerHTML += `<div class="day other">${d}</div>`;
+
+  // Async: load dots for each weekday in the month
+  loadMonthDots(y, m, daysInMonth);
+}
+
+async function loadMonthDots(y, m, days) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  for (let d=1;d<=days;d++) {
+    const date = new Date(y,m,d);
+    if (date < today) continue;
+    const dow = (date.getDay()+6)%7;
+    if (dow >= 5) continue;
+    const ds = dateStr(date);
+    if (bookAvailCache[ds]) continue;
+    try {
+      const slots = await fetch(`${API}/api/availability/${ds}`).then(r=>r.json());
+      bookAvailCache[ds] = slots;
+      if (slots.length > 0) {
+        const cells = document.querySelectorAll(`#book-cal-grid .day:not(.other):not(.past):not(.weekend)`);
+        cells.forEach(cell => {
+          if (cell.textContent.trim() == d) cell.classList.add("has-slots");
+        });
+      }
+    } catch(e) {}
+  }
+}
+
+async function bookSelectDate(ds) {
+  bookSelectedDate = ds;
+  bookSelectedSlot = null;
+
+  // Load slots
+  let slots = bookAvailCache[ds];
+  if (!slots) {
+    slots = await fetch(`${API}/api/availability/${ds}`).then(r=>r.json()).catch(()=>[]);
+    bookAvailCache[ds] = slots;
+  }
+
+  // Update calendar selection
+  renderBookCalendar();
+
+  // Show step 2
+  bookGoStep(2);
+  const d = new Date(ds+"T00:00:00");
+  document.getElementById("book-date-label").textContent = d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+
+  const slotsEl = document.getElementById("book-slots");
+  if (slots.length === 0) {
+    slotsEl.innerHTML = `
+      <div style="color:var(--muted);font-size:13px;margin-bottom:16px">No standard slots available this day.</div>
+      <div class="info-box"><strong>Request an appointment?</strong> You can still submit a request and our team will find a time that works.</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input type="time" id="request-time" step="900" style="background:var(--surfaceHi);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:13px" />
+        <button class="btn" onclick="selectRequestTime()">Request This Time</button>
+      </div>`;
+  } else {
+    slotsEl.innerHTML = `<div class="slot-grid">${slots.map(s =>
+      `<button class="slot-btn" data-start="${s.start_time}" data-end="${s.end_time}" onclick="selectSlot(this)">${fmtTime(s.start_time)}</button>`
+    ).join("")}</div>`;
+  }
+}
+
+function selectSlot(btn) {
+  document.querySelectorAll(".slot-btn").forEach(b=>b.classList.remove("selected"));
+  btn.classList.add("selected");
+  bookSelectedSlot = { start: btn.dataset.start, end: btn.dataset.end, isOpenSlot: true };
+}
+
+function selectRequestTime() {
+  const t = document.getElementById("request-time").value;
+  if (!t) return;
+  const [h,m] = t.split(":").map(Number);
+  const endH = h + 1;
+  bookSelectedSlot = {
+    start: t,
+    end: `${String(endH).padStart(2,"0")}:${String(m).padStart(2,"0")}`,
+    isOpenSlot: false
+  };
+  document.getElementById("book-slots").innerHTML += `<div style="margin-top:8px;color:var(--amber);font-size:13px">⏰ Requested: ${fmtTime(t)} — pending approval</div>`;
+}
+
+function renderBookSummary() {
+  if (!bookSelectedDate || !bookSelectedSlot) { bookGoStep(2); return; }
+  const d = new Date(bookSelectedDate+"T00:00:00");
+  const typeLabel = {in_person:"In Person",phone:"Phone Call",video:"Video Visit"}[document.getElementById("book-type").value];
+  const notes = document.getElementById("book-notes").value;
+  const isOpen = bookSelectedSlot.isOpenSlot;
+
+  document.getElementById("book-summary").innerHTML = `
+    <div class="detail-row"><span class="label">Date</span><span>${d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</span></div>
+    <div class="detail-row"><span class="label">Time</span><span>${fmtTime(bookSelectedSlot.start)} – ${fmtTime(bookSelectedSlot.end)}</span></div>
+    <div class="detail-row"><span class="label">Type</span><span>${typeLabel}</span></div>
+    <div class="detail-row"><span class="label">Status</span><span><span class="badge ${isOpen?"badge-confirmed":"badge-pending"}">${isOpen?"Will auto-confirm":"Pending approval"}</span></span></div>
+    ${notes ? `<div class="detail-row"><span class="label">Reason</span><span>${esc(notes)}</span></div>` : ""}
+  `;
+}
+
+async function confirmBooking() {
+  console.log("[confirm] npub:", patientNpub, "date:", bookSelectedDate, "slot:", bookSelectedSlot);
+  if (!patientNpub || !bookSelectedDate || !bookSelectedSlot) {
+    alert("Missing: npub=" + patientNpub + " date=" + bookSelectedDate + " slot=" + JSON.stringify(bookSelectedSlot));
+    return;
+  }
+  const phone = document.getElementById("book-phone").value;
+  const type  = document.getElementById("book-type").value;
+  const notes = document.getElementById("book-notes").value;
+
+  try {
+    const res = await fetch(`${API}/api/appointments`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        patient_npub: patientNpub,
+        patient_name: patientName,
+        patient_phone: phone || null,
+        date: bookSelectedDate,
+        start_time: bookSelectedSlot.start,
+        end_time: bookSelectedSlot.end,
+        appt_type: type,
+        notes: notes || null,
+        video_url: null,
+      })
+    });
+    const data = await res.json();
+    const isConfirmed = data.status === "confirmed";
+
+    document.getElementById("book-success-icon").textContent = isConfirmed ? "✅" : "📋";
+    document.getElementById("book-success-title").textContent = isConfirmed ? "Appointment Confirmed!" : "Request Submitted!";
+    document.getElementById("book-success-sub").textContent = isConfirmed
+      ? `Your appointment on ${fmtDate(bookSelectedDate)} at ${fmtTime(bookSelectedSlot.start)} is confirmed.`
+      : `Your request for ${fmtDate(bookSelectedDate)} at ${fmtTime(bookSelectedSlot.start)} has been sent to our team for approval. We'll be in touch shortly.`;
+
+    bookGoStep(4);
+    // Reset booking state
+    bookSelectedDate = null; bookSelectedSlot = null;
+    loadUpcoming();
+  } catch(e) { alert("Error booking appointment: " + e.message); }
+}
+
+function bookChangeMonth(dir) {
+  bookMonth.setMonth(bookMonth.getMonth()+dir);
+  renderBookCalendar();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function dateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function fmtTime(t) {
+  const [h,m] = t.split(":").map(Number);
+  return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
+}
+function fmtDate(ds) {
+  const d = new Date(ds+"T00:00:00");
+  return d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+}
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+</script>
+</body>
+</html>
