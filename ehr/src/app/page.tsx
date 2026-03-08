@@ -10067,10 +10067,10 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{
             width: 52, height: 52, borderRadius: 14,
-            background: "linear-gradient(135deg, #06b6d4, #3b82f6)",
+            overflow: "hidden",
             display: "inline-flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontWeight: 700, fontSize: 24, marginBottom: 16,
-          }}>N</div>
+            marginBottom: 16,
+          }}><img src="/icon.png" alt="" style={{width:52,height:52}} /></div>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#e2e8f0" }}>
             {PRACTICE_NAME.split(" ").length > 2 ? PRACTICE_NAME.split(" ").slice(0, -1).join(" ") : PRACTICE_NAME}
           </div>
