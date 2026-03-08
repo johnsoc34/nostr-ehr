@@ -77,7 +77,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "electron/icon.png",
+      "icon": "electron/icon.ico",
       "artifactName": "NostrEHR-Setup-${version}.${ext}"
     },
     "nsis": {

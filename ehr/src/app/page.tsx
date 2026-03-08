@@ -143,6 +143,45 @@ async function publishPatientGrantsForStaff(
   }catch(e){console.error("[Grant] Failed to publish patient grants:",e);}
 }
 
+// Auto-publish a kind 1012 PatientKeyGrant to any active FHIR reader service agent.
+// Called whenever a new patient is created so the FHIR API can immediately decrypt their data.
+async function publishPatientGrantForFhirAgent(
+  patient: {id:string; npub?:string},
+  keys: Keypair,
+  relay: ReturnType<typeof useRelay>,
+){
+  if(!patient.npub) return;
+  try{
+    // Find active FHIR reader agent from kind 1015 events
+    const agentEvents:NostrEvent[]=[];
+    await new Promise<void>(resolve=>{
+      const subId=relay.subscribe(
+        {kinds:[AGENT_KINDS.ServiceAgentGrant],authors:[keys.pkHex],"#service":["fhir-reader"],limit:5},
+        (ev:NostrEvent)=>agentEvents.push(ev),
+        ()=>{relay.unsubscribe(subId);resolve();}
+      );
+      setTimeout(()=>{try{relay.unsubscribe(subId);}catch{}resolve();},3000);
+    });
+    if(agentEvents.length===0) return; // no FHIR agent configured
+
+    // Get the latest grant to find the agent pubkey
+    const latest=agentEvents.sort((a,b)=>b.created_at-a.created_at)[0];
+    const agentPkHex=latest.tags.find(t=>t[0]==="p")?.[1];
+    if(!agentPkHex) return;
+
+    const patientPkHex=npubToHex(patient.npub);
+    const agentSharedX=getSharedSecret(keys.sk,agentPkHex);
+    const patientSharedSecret=toHex(getSharedSecret(keys.sk,patientPkHex));
+    const payload={patientId:patient.id,patientPkHex,patientSharedSecret};
+    const encrypted=await nip44Encrypt(JSON.stringify(payload),agentSharedX);
+    const tags=[["p",agentPkHex],["pt",patient.id],["grant","patient-secret"]];
+    const event=await buildAndSignEvent(STAFF_KINDS.PatientKeyGrant,encrypted,tags,keys.sk);
+    if(await relay.publish(event)){
+      console.log(`[Grant] FHIR agent grant published for patient ${patient.id}`);
+    }
+  }catch(e){console.error("[Grant] Failed to publish FHIR agent grant:",e);}
+}
+
 function npubToHex(npub: string): string {
   if (!npub || !npub.startsWith('npub')) throw new Error('Invalid npub');
   const data = npub.slice(5);
@@ -1437,6 +1476,9 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
   // Publish patient key grants to all active staff (kind 1012)
   publishPatientGrantsForStaff(stripped, keys, relay);
 
+  // Auto-grant FHIR reader agent access to new patient
+  publishPatientGrantForFhirAgent(stripped, keys, relay);
+
   // Sync to billing system
   if(stripped.npub){
     try{
@@ -1902,6 +1944,9 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
 
       // Re-publish patient key grants for staff (new patient pubkey)
       publishPatientGrantsForStaff(updated,keys,relay);
+
+      // Re-grant FHIR reader agent access with new patient pubkey
+      publishPatientGrantForFhirAgent(updated,keys,relay);
 
       // Update billing record + trigger whitelist sync
       let billingStatus="";
@@ -7659,6 +7704,7 @@ function ServiceAgentsManager({ keys, relay }: {
   const [generating, setGenerating] = useState<"billing" | "fhir-reader" | null>(null);
   const [generatedAgent, setGeneratedAgent] = useState<ServiceAgent | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [republishing, setRepublishing] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
@@ -7791,6 +7837,71 @@ function ServiceAgentsManager({ keys, relay }: {
     }
   };
 
+  const handleRepublish = async (agent: { service: string; pkHex: string }) => {
+    if (!keys) return;
+    setRepublishing(agent.service);
+    try {
+      const { service, pkHex } = agent;
+
+      // Re-publish kind 1015 ServiceAgentGrant
+      const agentGrantPayload = {
+        agentPubkey: pkHex,
+        service,
+        permissions: service === "billing" ? ["send-invoices"] : ["read-clinical-data"],
+        grantedAt: Math.floor(Date.now() / 1000),
+      };
+      const agentSharedX = getSharedSecret(keys.sk, pkHex);
+      const encryptedGrant = await nip44Encrypt(JSON.stringify(agentGrantPayload), agentSharedX);
+      const grantTags = [
+        ["p", pkHex],
+        ["service", service],
+        ["d", `service-agent-${service}`],
+      ];
+      const grantEvent = await buildAndSignEvent(
+        AGENT_KINDS.ServiceAgentGrant, encryptedGrant, grantTags, keys.sk
+      );
+      const grantOk = await relay.publish(grantEvent);
+      if (!grantOk) { alert("Failed to publish agent grant."); return; }
+
+      if (service === "fhir-reader") {
+        // Re-publish practice key grant + patient key grants
+        const practiceSharedSecret = toHex(getSharedSecret(keys.sk, keys.pkHex));
+        const practicePayload = { practiceSharedSecret, practicePkHex: keys.pkHex };
+        const encrypted1013 = await nip44Encrypt(JSON.stringify(practicePayload), agentSharedX);
+        const tags1013 = [["p", pkHex], ["grant", "practice-secret"]];
+        const event1013 = await buildAndSignEvent(STAFF_KINDS.PracticeKeyGrant, encrypted1013, tags1013, keys.sk);
+        await relay.publish(event1013);
+
+        const patients = loadPatients();
+        let granted = 0;
+        for (const p of patients) {
+          if (!p.npub) continue;
+          try {
+            const patientPkHex = npubToHex(p.npub);
+            const patientSharedSecret = toHex(getSharedSecret(keys.sk, patientPkHex));
+            const payload = { patientId: p.id, patientPkHex, patientSharedSecret };
+            const encrypted = await nip44Encrypt(JSON.stringify(payload), agentSharedX);
+            const tags = [["p", pkHex], ["pt", p.id], ["grant", "patient-secret"]];
+            const event = await buildAndSignEvent(STAFF_KINDS.PatientKeyGrant, encrypted, tags, keys.sk);
+            if (await relay.publish(event)) granted++;
+          } catch (e) { console.warn(`Patient grant failed for ${p.id}:`, e); }
+        }
+        alert(`Re-published all grants for FHIR Reader (${granted} patients).`);
+      } else {
+        alert("Re-published billing agent grant.");
+      }
+
+      // Update timestamp
+      setAgents(prev => prev.map(a => a.service === service
+        ? { ...a, grantedAt: Math.floor(Date.now() / 1000) } : a
+      ));
+    } catch (e: any) {
+      alert(`Re-publish failed: ${e.message}`);
+    } finally {
+      setRepublishing(null);
+    }
+  };
+
   const serviceLabels: Record<string, string> = {
     billing: "Billing Agent",
     "fhir-reader": "FHIR Reader",
@@ -7834,6 +7945,12 @@ function ServiceAgentsManager({ keys, relay }: {
                       Authorized {new Date(a.grantedAt * 1000).toLocaleDateString()}
                     </div>
                   </div>
+                  {a.service === "fhir-reader" && (
+                    <Btn small col="#0ea5e9" disabled={republishing === a.service}
+                      onClick={() => handleRepublish(a)}>
+                      {republishing === a.service ? "⏳" : "🔄"} Grants
+                    </Btn>
+                  )}
                   <div style={{
                     fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
                     background: "#0f2a1f", color: "#10b981"
@@ -7928,12 +8045,20 @@ function ServiceAgentsManager({ keys, relay }: {
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <Btn small solid col="#22c55e" onClick={handlePublish} disabled={publishing}>
-                  {publishing ? "Publishing..." : "Publish Grants to Relay"}
-                </Btn>
-                <Btn small col="#64748b" onClick={() => { setGeneratedAgent(null); setGenerating(null); setStatus(""); }}>
-                  Cancel
-                </Btn>
+                {!status.startsWith("✓ All grants published") && !status.startsWith("✓ Billing agent authorized") ? (
+                  <>
+                    <Btn small solid col="#22c55e" onClick={handlePublish} disabled={publishing}>
+                      {publishing ? "Publishing..." : "Publish Grants to Relay"}
+                    </Btn>
+                    <Btn small col="#64748b" onClick={() => { setGeneratedAgent(null); setGenerating(null); setStatus(""); }}>
+                      Cancel
+                    </Btn>
+                  </>
+                ) : (
+                  <Btn small solid col="#22c55e" onClick={() => { setGeneratedAgent(null); setGenerating(null); setStatus(""); }}>
+                    ✓ Done
+                  </Btn>
+                )}
               </div>
 
               {status && (
@@ -10976,6 +11101,10 @@ export default function Home(){
                relay.cacheInfo.eventCount>0?`Offline · ${relay.cacheInfo.eventCount.toLocaleString()} cached${relay.queueCount>0?` · ${relay.queueCount} pending`:""}`:
                relay.queueCount>0?`Reconnecting… · ${relay.queueCount} pending`:
                "Reconnecting…"}
+            </span>
+            <span style={{fontSize:9,color:"#475569",fontFamily:"'IBM Plex Mono',monospace",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}
+              title={RELAY_URL}>
+              {RELAY_URL.replace(/^wss?:\/\//,"")}
             </span>
             <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
             <Badge t="🔐 NIP-44 active" col="#a78bfa" bg="#1e1040"/>
