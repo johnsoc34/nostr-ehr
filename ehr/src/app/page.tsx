@@ -10055,13 +10055,17 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
   return (
     <div style={{
       minHeight: "100vh", background: "#0f172a",
+      backgroundImage: "url('/login-bg.png')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans','Helvetica Neue',sans-serif",
     }}>
       <div style={{
-        width: 380, background: "#1e293b", borderRadius: 16,
-        border: "1px solid #334155", padding: "40px 36px",
+        width: 380, background: "rgba(30,41,59,0.92)", borderRadius: 16,
+        border: "1px solid #33415588", padding: "40px 36px",
         boxShadow: "0 25px 50px rgba(0,0,0,0.5)",
+        backdropFilter: "blur(12px)",
       }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
