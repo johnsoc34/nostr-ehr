@@ -459,7 +459,7 @@ function useRelay(){
 // ─── Cache-aware loading helper ───────────────────────────────────────────────
 // Loads from IndexedDB cache first (instant), then subscribes to relay for fresh data.
 // Components call this instead of raw relay.subscribe for their initial data load.
-// The `processEvents` callback receives (fhirJson, event-like metadata) and builds component state.
+// The `processDecrypted` callback receives decrypted FHIR items and builds component state.
 
 interface CacheLoadOpts {
   kinds: number[];
@@ -3508,7 +3508,6 @@ function ImmunizationList({patient,keys,relay}:{patient:Patient;keys:Keypair|nul
   </div>);
 }
 
-// ─── Patient Chart View ───────────────────────────────────────────────────────
 // ─── Messages View (threaded email style) ────────────────────────────────────
 function MessagesView({patient,keys,relay,initialThreadId}:{
   patient:Patient;keys:Keypair|null;relay:ReturnType<typeof useRelay>;
@@ -6773,6 +6772,7 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
   const [encounterDraft,setEncounterDraft]=useState({chief:"",note:"",weight:"",weightUnit:"lb" as "kg"|"lb"});
   const [encounterKey,setEncounterKey]=useState(0);
   const [panelCollapsed,setPanelCollapsed]=useState(false);
+  const [showDemographics,setShowDemographics]=useState(false);
   const [ordersAutoOpen,setOrdersAutoOpen]=useState<"lab"|"imaging"|"rx"|null>(null);
   const [ordersKey,setOrdersKey]=useState(0);
   const age=ageFromDob(patient.dob);
@@ -6861,8 +6861,22 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
 
       {tab==="overview" &&(
         <>
-          <BillingStatusCard patient={patient}/>
-          <OverviewTiles patient={patient} keys={keys} relay={relay} onNavigate={t=>setTab(t as ChartTab)}/>
+          {showDemographics && keys ? (
+            <div style={{marginBottom:16}}>
+              <DemographicsCard patient={patient} onUpdated={(p)=>{onPatientUpdated(p);setShowDemographics(false);}} keys={keys} relay={relay}/>
+              <div style={{marginTop:8}}>
+                <Btn small col="#475569" onClick={()=>setShowDemographics(false)}>← Back to Overview</Btn>
+              </div>
+            </div>
+          ) : (
+            <>
+              <BillingStatusCard patient={patient}/>
+              <OverviewTiles patient={patient} keys={keys} relay={relay} onNavigate={t=>{
+                if(t==="demographics"){setShowDemographics(true);}
+                else setTab(t as ChartTab);
+              }}/>
+            </>
+          )}
         </>
       )}
       {tab==="timeline"      &&<TimelineView patient={patient} keys={keys} relay={relay}/>}
@@ -7200,9 +7214,9 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
       {/* ── Demographics ── */}
       <Tile col="#0ea5e9">
         <TileHeader col="#0ea5e9" icon="👤" label="Demographics" tab="overview"
-          action={<span onClick={()=>onNavigate("overview")} style={{fontSize:10,color:"#475569",cursor:"pointer"}}
+          action={canDo("write")?<span onClick={()=>onNavigate("demographics")} style={{fontSize:10,color:"#475569",cursor:"pointer"}}
             onMouseEnter={e=>(e.currentTarget.style.color="#0ea5e9")}
-            onMouseLeave={e=>(e.currentTarget.style.color="#475569")}>Edit</span>}
+            onMouseLeave={e=>(e.currentTarget.style.color="#475569")}>Edit</span>:undefined}
         />
         <TileBody>
           <DRow label="DOB" val={patient.dob}/>
@@ -7300,7 +7314,7 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
   );
 }
 
-// ─── Staff Management (Phase 18: Multi-User) ─────────────────────────────────
+// ─── Staff Management (Multi-User) ────────────────────────────────────────────
 function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useRelay>}){
   const [roster,setRoster]=useState<StaffMember[]>([]);
   const [loading,setLoading]=useState(true);
@@ -8079,7 +8093,7 @@ function ServiceAgentsManager({ keys, relay }: {
   );
 }
 
-// ─── Settings / Practice Key Management ──────────────────────────────────────
+// ─── Settings (Practice Identity, Security, Service Agents, Staff, Backup) ───
 function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof useRelay>}){
   const [showKeys,setShowKeys]=useState(false);
   const [copied,setCopied]=useState<string|null>(null);
@@ -9209,7 +9223,6 @@ function VitalsHistory({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
   </div>);
 }
 
-// ─── Patient List Sidebar ─────────────────────────────────────────────────────
 // ─── Inbox Sidebar ────────────────────────────────────────────────────────────
 // localStorage keys:
 //   nostr_ehr_msg_read   : JSON string[]  — event IDs that have been read (clicked)
@@ -9581,6 +9594,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
 }
 
 
+// ─── Patient List Sidebar ─────────────────────────────────────────────────────
 function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,staffSession}:{
   patients:Patient[];selected:Patient|null;onSelect:(p:Patient)=>void;onAdd:()=>void;onSettings:()=>void;search:string;
   staffSession?:StaffSession|null;
@@ -11090,26 +11104,25 @@ export default function Home(){
             </div>
           )}
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <div style={{width:7,height:7,borderRadius:"50%",
-              background:relay.status==="connected"?(relay.queueCount>0?"#38bdf8":ST_COL.connected):
-                relay.cacheInfo.eventCount>0?"#fbbf24":ST_COL[relay.status]||ST_COL.disconnected,
-              boxShadow:relay.status==="connected"?(relay.queueCount>0?"0 0 6px rgba(56,189,248,0.4)":`0 0 6px ${ST_COL.connected}`):
-                relay.cacheInfo.eventCount>0?"0 0 6px rgba(251,191,36,0.3)":"none",
-              animation:relay.status==="connecting"||(relay.queueCount>0)?"pulse 1s ease-in-out infinite":"none"}}/>
-            <span style={{
-              color:relay.status==="connected"?(relay.queueCount>0?"#38bdf8":ST_COL.connected):
-                relay.cacheInfo.eventCount>0?"#fbbf24":ST_COL[relay.status]||ST_COL.disconnected,
-              fontSize:11}}>
-              {relay.status==="connected"?(relay.queueCount>0?`Connected · Syncing ${relay.queueCount} pending…`:"Connected"):
-               relay.status==="connecting"?"Connecting…":
-               relay.cacheInfo.eventCount>0?`Offline · ${relay.cacheInfo.eventCount.toLocaleString()} cached${relay.queueCount>0?` · ${relay.queueCount} pending`:""}`:
-               relay.queueCount>0?`Reconnecting… · ${relay.queueCount} pending`:
-               "Reconnecting…"}
-            </span>
-            <span style={{fontSize:9,color:"#475569",fontFamily:"'IBM Plex Mono',monospace",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}
+            <div style={{display:"flex",gap:6,alignItems:"center",cursor:"default",position:"relative"}}
               title={RELAY_URL}>
-              {RELAY_URL.replace(/^wss?:\/\//,"")}
-            </span>
+              <div style={{width:7,height:7,borderRadius:"50%",
+                background:relay.status==="connected"?(relay.queueCount>0?"#38bdf8":ST_COL.connected):
+                  relay.cacheInfo.eventCount>0?"#fbbf24":ST_COL[relay.status]||ST_COL.disconnected,
+                boxShadow:relay.status==="connected"?(relay.queueCount>0?"0 0 6px rgba(56,189,248,0.4)":`0 0 6px ${ST_COL.connected}`):
+                  relay.cacheInfo.eventCount>0?"0 0 6px rgba(251,191,36,0.3)":"none",
+                animation:relay.status==="connecting"||(relay.queueCount>0)?"pulse 1s ease-in-out infinite":"none"}}/>
+              <span style={{
+                color:relay.status==="connected"?(relay.queueCount>0?"#38bdf8":ST_COL.connected):
+                  relay.cacheInfo.eventCount>0?"#fbbf24":ST_COL[relay.status]||ST_COL.disconnected,
+                fontSize:11}}>
+                {relay.status==="connected"?(relay.queueCount>0?`Connected · Syncing ${relay.queueCount} pending…`:"Connected"):
+                 relay.status==="connecting"?"Connecting…":
+                 relay.cacheInfo.eventCount>0?`Offline · ${relay.cacheInfo.eventCount.toLocaleString()} cached${relay.queueCount>0?` · ${relay.queueCount} pending`:""}`:
+                 relay.queueCount>0?`Reconnecting… · ${relay.queueCount} pending`:
+                 "Reconnecting…"}
+              </span>
+            </div>
             <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
             <Badge t="🔐 NIP-44 active" col="#a78bfa" bg="#1e1040"/>
             <button onClick={handleSignOut} style={{
