@@ -48,7 +48,7 @@ function liftX(x: bigint):Point|null{
   return new Point(x,y%2n===0n?y:P-y);
 }
 async function sha256(b: Uint8Array):Promise<Uint8Array>{
-  return new Uint8Array(await crypto.subtle.digest("SHA-256",b));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256",b.buffer as ArrayBuffer));
 }
 export function toBytes(n: bigint,len=32):Uint8Array{
   const a=new Uint8Array(len);
@@ -281,18 +281,18 @@ export interface StaffMember {
   revokedAt?: number;      // unix timestamp if soft-revoked (still in roster for history)
 }
 
-/** Encrypted content of a kind 30078 StaffRoster event */
+/** Encrypted content of a kind 2102 StaffRoster event */
 export interface StaffRosterPayload {
   staff: StaffMember[];
 }
 
-/** Encrypted content of a kind 1013 PracticeKeyGrant event */
+/** Encrypted content of a kind 2101 PracticeKeyGrant event */
 export interface PracticeKeyGrantPayload {
   practiceSharedSecret: string;  // hex-encoded X₁ = getSharedSecret(practiceSk, practicePkHex)
   practicePkHex: string;         // practice public key for reference
 }
 
-/** Encrypted content of a kind 1012 PatientKeyGrant event */
+/** Encrypted content of a kind 2100 PatientKeyGrant event */
 export interface PatientKeyGrantPayload {
   patientId: string;             // patient UUID
   patientPkHex: string;          // patient public key (hex)
