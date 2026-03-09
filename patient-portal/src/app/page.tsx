@@ -1731,7 +1731,7 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
     };
 
     const subId = relay.subscribe(
-      { kinds: [1007], "#p": [keys.pkHex, practicePk], limit: 100 },
+      { kinds: [FHIR_KINDS.Message], "#p": [keys.pkHex, practicePk], limit: 100 },
       processEvent,
       () => finishLoading()
     );
@@ -1749,7 +1749,7 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
       const baseSubject = rootMsg?.subject || "message";
       const replySubject = baseSubject.startsWith("Re:") ? baseSubject : `Re: ${baseSubject}`;
       const tags = [["p", practicePk], ["p", keys.pkHex], ["subject", replySubject], ["e", selectedThreadId]];
-      const event = await buildAndSignEvent(1007, encrypted, tags, keys.sk);
+      const event = await buildAndSignEvent(FHIR_KINDS.Message, encrypted, tags, keys.sk);
       if (await relay.publish(event)) {
         setMessages(m => [...m, {
           event: { ...event, created_at: Math.floor(Date.now() / 1000) },
@@ -1769,7 +1769,7 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
       
       const encrypted = await portalEncrypt(newMessage.trim(), keys, practicePk);
       const tags = [["p", practicePk], ["p", keys.pkHex], ["subject", subject]];
-      const event = await buildAndSignEvent(1007, encrypted, tags, keys.sk);
+      const event = await buildAndSignEvent(FHIR_KINDS.Message, encrypted, tags, keys.sk);
       if (await relay.publish(event)) {
         const rootId = event.id;
         setMessages(m => [...m, {
@@ -2643,17 +2643,15 @@ const ALL_CLINICAL_KINDS = [
   FHIR_KINDS.Patient, FHIR_KINDS.Encounter, FHIR_KINDS.MedicationRequest,
   FHIR_KINDS.Observation, FHIR_KINDS.Condition, FHIR_KINDS.AllergyIntolerance,
   FHIR_KINDS.Immunization, FHIR_KINDS.Message,
-  1008, // ServiceRequest (lab/imaging orders)
-  1009, // DiagnosticReport (results)
-  1010, // RxOrder
-  1011, // DocumentReference
+  FHIR_KINDS.ServiceRequest, FHIR_KINDS.DiagnosticReport,
+  FHIR_KINDS.RxOrder, FHIR_KINDS.DocumentReference,
 ];
 
 const KIND_LABELS: Record<number, string> = {
-  1000: "Demographics", 1001: "Encounters", 1002: "Medications",
-  1003: "Vitals", 1004: "Conditions", 1005: "Allergies",
-  1006: "Immunizations", 1007: "Messages", 1008: "Orders",
-  1009: "Results", 1011: "Documents",
+  2110: "Demographics", 2111: "Encounters", 2112: "Medications",
+  2113: "Vitals", 2114: "Conditions", 2115: "Allergies",
+  2116: "Immunizations", 2117: "Messages", 2118: "Orders",
+  2119: "Results", 2121: "Documents",
 };
 
 function MyDataView({ keys, relay, practicePk, practiceName, connections, T }: {

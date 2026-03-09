@@ -21,7 +21,7 @@ import { evaluateImmunizations, evaluateWellCheck, type ImmunizationRecord, type
 import VideoRoom from "../lib/VideoRoom";
 import { TelehealthSession, TELEHEALTH_KINDS } from "../lib/telehealth";
 
-const AGENT_KINDS = { ServiceAgentGrant: 1015 } as const;
+const AGENT_KINDS = { ServiceAgentGrant: 2103 } as const;
 
 
 // ─── Practice Configuration (from environment variables) ─────────────────────
@@ -98,7 +98,7 @@ async function publishClinicalEvent(opts: {
   return ok ? event : null;
 }
 
-/** Publish patient key grants (kind 1012) for a new patient to all active staff.
+/** Publish patient key grants (kind 2100) for a new patient to all active staff.
  *  Called during patient creation so staff can immediately access the new patient.
  *  Only works when logged in as practice owner (needs practice SK for ECDH). */
 async function publishPatientGrantsForStaff(
@@ -143,7 +143,7 @@ async function publishPatientGrantsForStaff(
   }catch(e){console.error("[Grant] Failed to publish patient grants:",e);}
 }
 
-// Auto-publish a kind 1012 PatientKeyGrant to any active FHIR reader service agent.
+// Auto-publish a kind 2100 PatientKeyGrant to any active FHIR reader service agent.
 // Called whenever a new patient is created so the FHIR API can immediately decrypt their data.
 async function publishPatientGrantForFhirAgent(
   patient: {id:string; npub?:string},
@@ -152,7 +152,7 @@ async function publishPatientGrantForFhirAgent(
 ){
   if(!patient.npub) return;
   try{
-    // Find active FHIR reader agent from kind 1015 events
+    // Find active FHIR reader agent from kind 2103 events
     const agentEvents:NostrEvent[]=[];
     await new Promise<void>(resolve=>{
       const subId=relay.subscribe(
@@ -228,7 +228,7 @@ function Btn({children,onClick,col="#0ea5e9",solid=false,disabled=false,small=fa
 }
 const ST_COL:Record<string,string>={connected:"#4ade80",connecting:"#f59e0b",disconnected:"#64748b",error:"#f87171"};
 
-// ─── Publish Patient Demographics (kind 1000) ────────────────────────────────
+// ─── Publish Patient Demographics (kind 2110) ────────────────────────────────
 // Publishes a FHIR Patient resource to the relay so demographics sync across browsers.
 // Called on patient creation and demographic updates. Latest event wins (current state only).
 async function publishPatientDemographics(
@@ -272,7 +272,7 @@ async function publishPatientDemographics(
     const event = await buildAndSignEvent(FHIR_KINDS.Patient, practiceEncrypted, tags, keys.sk);
     const result = await relay.publishOrQueue(event, patient.id, JSON.stringify(fhir));
     if (result) {
-      console.log(`[demographics] Published kind 1000 for ${patient.name}`);
+      console.log(`[demographics] Published kind 2110 for ${patient.name}`);
     }
     return !!result;
   } catch (err) {
@@ -1470,10 +1470,10 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
   updatePatient(stripped);
   setCreated(stripped);
   
-  // Publish demographics to relay (kind 1000)
+  // Publish demographics to relay (kind 2110)
   publishPatientDemographics(stripped, keys, relay);
 
-  // Publish patient key grants to all active staff (kind 1012)
+  // Publish patient key grants to all active staff (kind 2100)
   publishPatientGrantsForStaff(stripped, keys, relay);
 
   // Auto-grant FHIR reader agent access to new patient
@@ -3556,7 +3556,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
     const check=()=>{ if(eose1&&eose2)finish(); };
 
     // Phase 1: Hydrate from cache instantly
-    getCachedEvents(1007,patient.id).then(cached=>{
+    getCachedEvents(FHIR_KINDS.Message,patient.id).then(cached=>{
       if(cached.length>0){
         const msgs=cached.map(ce=>{
           try{
@@ -3615,10 +3615,10 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
       }catch{}
     };
 
-    // Single subscription: all kind 1007 events tagged with the practice pubkey
+    // Single subscription: all kind 2117 events tagged with the practice pubkey
     // Catches: practice-authored, staff-authored, AND patient-authored (since patients tag practice pk)
     // Direction determined by fromPractice check in process callback
-    const s1=relay.subscribe({kinds:[1007],"#p":[practicePkHex],limit:500},process,()=>{eose1=true;eose2=true;check();});
+    const s1=relay.subscribe({kinds:[FHIR_KINDS.Message],"#p":[practicePkHex],limit:500},process,()=>{eose1=true;eose2=true;check();});
     const s2:string|null=null;
     const fb=setTimeout(()=>finish(),3000);
     return()=>{ clearTimeout(fb); relay.unsubscribe(s1); if(s2)relay.unsubscribe(s2); };
@@ -3659,7 +3659,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
       const subject=newSubject.trim()||"Message from your provider";
       const extraTags:string[][]=[ ["subject",subject] ];
       if(newNoReply) extraTags.push(["no-reply","true"]);
-      const event=await publishClinicalEvent({kind:1007,plaintext:newBody.trim(),
+      const event=await publishClinicalEvent({kind:FHIR_KINDS.Message,plaintext:newBody.trim(),
         patientId:patient.id,patientPkHex:npubToHex(patient.npub),fhirType:"Message",keys,relay,
         extraTags});
       if(event){
@@ -3681,7 +3681,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
       const replySubject=subject.startsWith("Re:")?subject:`Re: ${subject}`;
       const extraTags:string[][]=[ ["subject",replySubject],["e",selectedThreadId] ];
       if(replyNoReply) extraTags.push(["no-reply","true"]);
-      const event=await publishClinicalEvent({kind:1007,plaintext:replyBody.trim(),
+      const event=await publishClinicalEvent({kind:FHIR_KINDS.Message,plaintext:replyBody.trim(),
         patientId:patient.id,patientPkHex:npubToHex(patient.npub),fhirType:"Message",keys,relay,
         extraTags});
       if(event){
@@ -4820,7 +4820,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
     }
     setSaving(true);
     try{
-      // Publish as MedicationRequest (kind 1002) so it lands in the Medications tab.
+      // Publish as MedicationRequest (kind 2112) so it lands in the Medications tab.
       // All Rx fields are stored in the FHIR payload alongside the standard fields.
       const fhir={
         resourceType:"MedicationRequest",
@@ -4848,7 +4848,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
         patientId:patient.id,patientPkHex:npubToHex(patient.npub!),fhirType:"MedicationRequest",keys,relay})){
         setRxForm(emptyRxForm);setAdding(false);setSaveStatus("saved");
         setTimeout(()=>setSaveStatus("idle"),2000);
-        // Note: do NOT call load() here — this event is kind 1002 and won't appear
+        // Note: do NOT call load() here — this event is kind 2112 and won't appear
         // in OrdersView's subscription (which only watches ServiceRequest/DiagnosticReport)
       } else {
         setSaveStatus("error");setTimeout(()=>setSaveStatus("idle"),3000);
@@ -7386,7 +7386,7 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
     const payload:StaffRosterPayload={staff:updatedStaff};
     const sharedX=getSharedSecret(keys.sk,keys.pkHex);
     const encrypted=await nip44Encrypt(JSON.stringify(payload),sharedX);
-    // Tags: staff pubkeys for reference (no d-tag needed since kind 1014 is regular, not replaceable)
+    // Tags: staff pubkeys for reference (no d-tag needed since kind 2102 is regular, not replaceable)
     const tags=[["roster","v1"],...updatedStaff.filter(s=>!s.revokedAt).map(s=>["p",s.pkHex,s.role])];
     const event=await buildAndSignEvent(STAFF_KINDS.StaffRoster,encrypted,tags,keys.sk);
     return await relay.publish(event);
@@ -7857,7 +7857,7 @@ function ServiceAgentsManager({ keys, relay }: {
     try {
       const { service, pkHex } = agent;
 
-      // Re-publish kind 1015 ServiceAgentGrant
+      // Re-publish kind 2103 ServiceAgentGrant
       const agentGrantPayload = {
         agentPubkey: pkHex,
         service,
@@ -8444,6 +8444,28 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
   const [editingId,setEditingId]=useState<number|null>(null);
   const [apptForm,setApptForm]=useState({patient_npub:"",patient_name:"",date:"",start_time:"09:00",end_time:"09:30",appt_type:"in_person",notes:"",video_url:"",status:"confirmed"});
   const [saving,setSaving]=useState(false);
+  const [visitColorMenu,setVisitColorMenu]=useState<number|null>(null); // appt id of open menu
+  const [editingComment,setEditingComment]=useState<number|null>(null); // appt id being comment-edited
+  const [commentDraft,setCommentDraft]=useState("");
+
+  // Visit workflow colors
+  const VISIT_COLORS:{[k:string]:{color:string;label:string}}={
+    "":         {color:"#3b82f6",label:"—"},           // baseline/default = blue
+    checked_in: {color:"#e879f9",label:"Checked In"},   // magenta
+    ready:      {color:"#22c55e",label:"Ready for Provider"}, // green
+    complete:   {color:"#e8edf5",label:"Visit Complete"},     // white
+    signed:     {color:"#a78bfa",label:"Visit Signed"},       // purple
+  };
+  function visitBarColor(appt:any){ return VISIT_COLORS[appt.visit_color||""]?.color||"#3b82f6"; }
+
+  // Quick-update visit tracking (fire-and-forget PATCH)
+  const updateVisitField=async(id:number,field:"visit_color"|"schedule_comment",value:string)=>{
+    try{
+      await fetch(`${CAL_API}/api/appointments/${id}/visit`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({[field]:value})});
+      // Update local state so UI is instant
+      setDayAppts(prev=>prev.map(a=>a.id===id?{...a,[field]:value}:a));
+    }catch(e){ console.error("visit update failed",e); }
+  };
 
   useEffect(()=>{ setPatients(loadPatients()); },[]);
 
@@ -8686,7 +8708,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
           </div>
 
           {/* Schedule body */}
-          <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+          <div onClick={()=>{if(visitColorMenu!==null)setVisitColorMenu(null);}} style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
             {isWeekend&&allTimes.length===0&&(
               <div style={{textAlign:"center",padding:"60px 20px",color:CS.muted}}>
                 <div style={{fontSize:40,marginBottom:14}}>🏖️</div>
@@ -8716,31 +8738,84 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
                   <div style={{width:52,flexShrink:0,textAlign:"right",color:CS.muted,fontSize:11,fontWeight:600,paddingTop:4,fontFamily:"monospace"}}>{fmtT(time)}</div>
                   <div style={{flex:1,borderTop:`1px solid ${CS.border}`,paddingTop:4,minHeight:56}}>
                     {appt?(
-                      <div onClick={()=>showDetail(appt.id)} style={{
-                        borderRadius:8,padding:"10px 14px",marginBottom:4,
-                        borderLeft:`3px solid ${statusColor(appt.status)}`,
-                        background:CS.surfaceHi,cursor:"pointer",
-                        display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,
-                        transition:"transform 0.15s",
-                      }}
-                        onMouseEnter={e=>(e.currentTarget as HTMLElement).style.transform="translateX(2px)"}
-                        onMouseLeave={e=>(e.currentTarget as HTMLElement).style.transform="translateX(0)"}
-                      >
-                        <div>
-                          <div style={{fontWeight:700,fontSize:13,marginBottom:3}}>{appt.patient_name}</div>
-                          <div style={{fontSize:11,color:CS.muted,display:"flex",gap:8,flexWrap:"wrap" as const}}>
-                            <span>{fmtT(appt.start_time)} – {fmtT(appt.end_time)}</span>
-                            <span style={{background:`${statusColor(appt.appt_type==="in_person"?CS.green:appt.appt_type==="phone"?CS.blue:CS.purple)}20`,color:appt.appt_type==="in_person"?CS.green:appt.appt_type==="phone"?CS.blue:CS.purple,padding:"1px 7px",borderRadius:99,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{typeLabel(appt.appt_type)}</span>
-                            <span style={{background:`${statusColor(appt.status)}20`,color:statusColor(appt.status),padding:"1px 7px",borderRadius:99,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{appt.status}</span>
-                            {appt.notes&&<span>· {appt.notes.substring(0,40)}{appt.notes.length>40?"…":""}</span>}
+                      <div style={{display:"flex",gap:0,alignItems:"stretch",marginBottom:4,position:"relative"}}>
+                        {/* ── Visit Color Indicator (clickable) ── */}
+                        <div onClick={e=>{e.stopPropagation();setVisitColorMenu(visitColorMenu===appt.id?null:appt.id);}}
+                          style={{width:6,flexShrink:0,borderRadius:"4px 0 0 4px",background:visitBarColor(appt),cursor:"pointer",transition:"width 0.15s"}}
+                          onMouseEnter={e=>(e.currentTarget as HTMLElement).style.width="10px"}
+                          onMouseLeave={e=>(e.currentTarget as HTMLElement).style.width="6px"}
+                          title={VISIT_COLORS[appt.visit_color||""]?.label||"Set visit status"}
+                        />
+                        {/* Visit color dropdown */}
+                        {visitColorMenu===appt.id&&(
+                          <div onClick={e=>e.stopPropagation()} style={{position:"absolute",left:14,top:0,zIndex:50,background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:8,padding:6,boxShadow:"0 8px 24px rgba(0,0,0,0.5)",minWidth:180}}>
+                            {Object.entries(VISIT_COLORS).map(([key,{color,label}])=>(
+                              <div key={key} onClick={()=>{updateVisitField(appt.id,"visit_color",key);setVisitColorMenu(null);}}
+                                style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600,color:CS.text,background:(appt.visit_color||"")=== key?`${color}15`:"transparent"}}
+                                onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=`${color}20`}
+                                onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=(appt.visit_color||"")===key?`${color}15`:"transparent"}
+                              >
+                                <span style={{width:12,height:12,borderRadius:3,background:color,border:color==="#e8edf5"?`1px solid ${CS.border}`:"none",flexShrink:0}}/>
+                                {label==="—"?"Baseline":label}
+                                {(appt.visit_color||"")=== key&&<span style={{marginLeft:"auto",fontSize:10}}>✓</span>}
+                              </div>
+                            ))}
                           </div>
-                        </div>
-                        <div style={{display:"flex",gap:6,flexShrink:0}}>
-                          {appt.status==="pending"&&<>
-                            <button onClick={e=>{e.stopPropagation();quickStatus(appt.id,"confirmed");}} style={{background:"#22c55e20",border:`1px solid ${CS.green}`,color:CS.green,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✓</button>
-                            <button onClick={e=>{e.stopPropagation();quickStatus(appt.id,"declined");}} style={{background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✗</button>
-                          </>}
-                          <button onClick={e=>{e.stopPropagation();openEdit(appt.id);}} style={{background:"none",border:`1px solid ${CS.border}`,color:CS.muted,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                        )}
+                        {/* ── Main appointment card ── */}
+                        <div onClick={()=>showDetail(appt.id)} style={{
+                          flex:1,borderRadius:"0 8px 8px 0",padding:"10px 14px",
+                          background:CS.surfaceHi,cursor:"pointer",
+                          display:"flex",flexDirection:"column",gap:4,
+                          transition:"transform 0.15s",
+                        }}
+                          onMouseEnter={e=>(e.currentTarget as HTMLElement).style.transform="translateX(2px)"}
+                          onMouseLeave={e=>(e.currentTarget as HTMLElement).style.transform="translateX(0)"}
+                        >
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                            <div>
+                              <div style={{fontWeight:700,fontSize:13,marginBottom:3}}>{appt.patient_name}</div>
+                              <div style={{fontSize:11,color:CS.muted,display:"flex",gap:8,flexWrap:"wrap" as const}}>
+                                <span>{fmtT(appt.start_time)} – {fmtT(appt.end_time)}</span>
+                                <span style={{background:`${statusColor(appt.appt_type==="in_person"?CS.green:appt.appt_type==="phone"?CS.blue:CS.purple)}20`,color:appt.appt_type==="in_person"?CS.green:appt.appt_type==="phone"?CS.blue:CS.purple,padding:"1px 7px",borderRadius:99,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{typeLabel(appt.appt_type)}</span>
+                                <span style={{background:`${statusColor(appt.status)}20`,color:statusColor(appt.status),padding:"1px 7px",borderRadius:99,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{appt.status}</span>
+                                {appt.visit_color&&VISIT_COLORS[appt.visit_color]&&<span style={{background:`${VISIT_COLORS[appt.visit_color].color}20`,color:VISIT_COLORS[appt.visit_color].color,padding:"1px 7px",borderRadius:99,fontSize:10,fontWeight:700}}>{VISIT_COLORS[appt.visit_color].label}</span>}
+                                {appt.notes&&<span>· {appt.notes.substring(0,40)}{appt.notes.length>40?"…":""}</span>}
+                              </div>
+                            </div>
+                            <div style={{display:"flex",gap:6,flexShrink:0}}>
+                              {appt.status==="pending"&&<>
+                                <button onClick={e=>{e.stopPropagation();quickStatus(appt.id,"confirmed");}} style={{background:"#22c55e20",border:`1px solid ${CS.green}`,color:CS.green,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✓</button>
+                                <button onClick={e=>{e.stopPropagation();quickStatus(appt.id,"declined");}} style={{background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✗</button>
+                              </>}
+                              <button onClick={e=>{e.stopPropagation();openEdit(appt.id);}} style={{background:"none",border:`1px solid ${CS.border}`,color:CS.muted,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
+                            </div>
+                          </div>
+                          {/* ── Schedule Comment (inline editable) ── */}
+                          <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+                            {editingComment===appt.id?(
+                              <div style={{display:"flex",flex:1,gap:6,alignItems:"center"}}>
+                                <input autoFocus value={commentDraft} onChange={e=>setCommentDraft(e.target.value)}
+                                  onKeyDown={e=>{if(e.key==="Enter"){updateVisitField(appt.id,"schedule_comment",commentDraft);setEditingComment(null);}if(e.key==="Escape")setEditingComment(null);}}
+                                  style={{flex:1,background:"#0d1117",border:`1px solid ${CS.accent}`,borderRadius:5,padding:"4px 8px",color:CS.text,fontSize:11,fontFamily:"inherit",outline:"none"}}
+                                  placeholder="Add comment for staff…"
+                                />
+                                <button onClick={()=>{updateVisitField(appt.id,"schedule_comment",commentDraft);setEditingComment(null);}}
+                                  style={{background:CS.accent,border:"none",color:"#fff",borderRadius:5,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
+                                <button onClick={()=>setEditingComment(null)}
+                                  style={{background:"none",border:`1px solid ${CS.border}`,color:CS.muted,borderRadius:5,padding:"3px 6px",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                              </div>
+                            ):(
+                              <div onClick={()=>{setEditingComment(appt.id);setCommentDraft(appt.schedule_comment||"");}}
+                                style={{flex:1,fontSize:11,color:appt.schedule_comment?CS.amber:CS.muted,fontStyle:appt.schedule_comment?"normal":"italic",cursor:"pointer",padding:"2px 4px",borderRadius:4,minHeight:18,display:"flex",alignItems:"center",gap:4}}
+                                onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="#f7931a10"}
+                                onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}
+                              >
+                                <span style={{fontSize:10}}>{appt.schedule_comment?"💬":"＋"}</span>
+                                {appt.schedule_comment||"Add comment…"}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ):slot?(
@@ -8880,6 +8955,18 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
               ))}
             </div>
             {detailModal.notes&&<div style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderRadius:8,padding:"12px 14px",fontSize:13,lineHeight:1.6,marginBottom:12}}>{detailModal.notes}</div>}
+            {detailModal.visit_color&&VISIT_COLORS[detailModal.visit_color]&&(
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                <span style={{width:10,height:10,borderRadius:3,background:VISIT_COLORS[detailModal.visit_color].color,border:VISIT_COLORS[detailModal.visit_color].color==="#e8edf5"?`1px solid ${CS.border}`:"none"}}/>
+                <span style={{fontSize:12,fontWeight:600,color:VISIT_COLORS[detailModal.visit_color].color}}>{VISIT_COLORS[detailModal.visit_color].label}</span>
+              </div>
+            )}
+            {detailModal.schedule_comment&&(
+              <div style={{background:"#f59e0b10",border:"1px solid #f59e0b30",borderRadius:8,padding:"10px 14px",fontSize:12,color:CS.amber,marginBottom:12,display:"flex",alignItems:"flex-start",gap:6}}>
+                <span style={{flexShrink:0}}>💬</span>
+                <span>{detailModal.schedule_comment}</span>
+              </div>
+            )}
             {detailModal.appt_type==="video"&&detailModal.patient_npub&&onStartVideo&&(
               <button onClick={()=>{
                 try{
@@ -9362,7 +9449,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
 
     const doFetch=(since?:number)=>{
       if(destroyed||relay.status!=="connected")return;
-      const filter:any={kinds:[1007],"#p":[queryPk],limit:500};
+      const filter:any={kinds:[FHIR_KINDS.Message],"#p":[queryPk],limit:500};
       if(since) filter.since=since;
       const subId=relay.subscribe(filter,(ev:NostrEvent)=>{ processEvent(ev); },()=>{
         relay.unsubscribe(subId);
@@ -9372,7 +9459,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
     };
 
     // Phase 1: cache
-    getCachedEventsByKind(1007).then(cached=>{
+    getCachedEventsByKind(FHIR_KINDS.Message).then(cached=>{
       if(cached.length>0){
         for(const ce of cached){
           itemMap.set(ce.eventId,{eventId:ce.eventId,pubkey:ce.pubkey,created_at:ce.created_at,tags:ce.tags,text:ce.fhirJson});
@@ -10563,7 +10650,7 @@ export default function Home(){
       await new Promise(r => setTimeout(r, 150));
       if (cancelled) return;
       try {
-        // 1. Fetch roster (kind 1014) signed by practice key
+        // 1. Fetch roster (kind 2102) signed by practice key
         const rosterEvent = await new Promise<NostrEvent | null>((resolve) => {
           let latest: NostrEvent | null = null;
           const subId = relay.subscribe(
@@ -10589,7 +10676,7 @@ export default function Home(){
         if (!staffTag) { setStaffError("Your key is not authorized in this practice's roster."); setStaffBootstrapping(false); return; }
         const tagRole = staffTag[2] as StaffRole || "ma";
 
-        // 3. Fetch practice secret grant (kind 1013) for this staff member
+        // 3. Fetch practice secret grant (kind 2101) for this staff member
         // Note: no #p relay filter — nostr-rs-relay 0.9.0 doesn't index it reliably
         const practiceGrant = await new Promise<NostrEvent | null>((resolve) => {
           let found: NostrEvent | null = null;
@@ -10634,7 +10721,7 @@ export default function Home(){
         const myEntry = rosterData.staff.find(s => s.pkHex === keys.pkHex && !s.revokedAt);
         if (!myEntry) { setStaffError("Your key has been revoked from this practice."); setStaffBootstrapping(false); return; }
 
-        // 5. Fetch patient key grants (kind 1012) for this staff member
+        // 5. Fetch patient key grants (kind 2100) for this staff member
         const patientSecrets = new Map<string, Uint8Array>();
         await new Promise<void>((resolve) => {
           const subId = relay.subscribe(
@@ -10681,7 +10768,7 @@ export default function Home(){
   }, [keys, relay.status, isPracticeOwner]);
 
   // Sync patient roster from relay — discovers patients missing from localStorage
-  // Uses kind 1000 (Patient demographics) as primary source, falls back to clinical event tags
+  // Uses kind 2110 (Patient demographics) as primary source, falls back to clinical event tags
   useEffect(() => {
     if (!keys || relay.status !== "connected") return;
     // Staff must wait for session bootstrap to get X₁ for decryption
@@ -10694,7 +10781,7 @@ export default function Home(){
     const decryptSecret = staffSession?.practiceSharedSecret || getSharedSecret(keys.sk, keys.pkHex);
 
     const syncPatients = async () => {
-      // Phase 1: Collect kind 1000 Patient events (full demographics, encrypted)
+      // Phase 1: Collect kind 2110 Patient events (full demographics, encrypted)
       const demographicEvents = new Map<string, NostrEvent>(); // patientId → latest event
       
       await new Promise<void>((resolve) => {
@@ -10717,14 +10804,14 @@ export default function Home(){
 
       if (cancelled) return;
 
-      // Phase 2: Also discover patients from clinical events (for patients without kind 1000)
+      // Phase 2: Also discover patients from clinical events (for patients without kind 2110)
       // Use #p tag filter (not authors) so events signed by staff are also found
       const discovered = new Map<string, { patientId: string; pkHex: string }>();
       const practicePkForFilter = isPracticeOwner ? keys.pkHex : PRACTICE_PUBKEY;
       
       await new Promise<void>((resolve) => {
         const subId = relay.subscribe(
-          { kinds: [1001, 1002, 1003, 1004, 1005, 1006, 1008, 1009, 1011], "#p": [practicePkForFilter] },
+          { kinds: [FHIR_KINDS.Encounter, FHIR_KINDS.MedicationRequest, FHIR_KINDS.Observation, FHIR_KINDS.Condition, FHIR_KINDS.AllergyIntolerance, FHIR_KINDS.Immunization, FHIR_KINDS.ServiceRequest, FHIR_KINDS.DiagnosticReport, FHIR_KINDS.DocumentReference], "#p": [practicePkForFilter] },
           (ev: NostrEvent) => {
             const ptTag = ev.tags.find((t: string[]) => t[0] === "pt");
             const pTags = ev.tags.filter((t: string[]) => t[0] === "p");
@@ -10758,7 +10845,7 @@ export default function Home(){
         const disc = discovered.get(patientId);
         const existingPatient = existingById.get(patientId);
 
-        // If we have a kind 1000 event, decrypt it for full demographics
+        // If we have a kind 2110 event, decrypt it for full demographics
         if (demEvent) {
           try {
             const decrypted = await nip44Decrypt(demEvent.content, decryptSecret);
@@ -10810,10 +10897,10 @@ export default function Home(){
               changed = true;
             }
           } catch (err) {
-            console.warn(`[sync] Failed to decrypt kind 1000 for ${patientId}:`, err);
+            console.warn(`[sync] Failed to decrypt kind 2110 for ${patientId}:`, err);
           }
         } else if (!existingPatient && disc) {
-          // No kind 1000 event — fall back to billing API for name
+          // No kind 2110 event — fall back to billing API for name
           try {
             const npub = npubEncode(fromHex(disc.pkHex));
             let name = "Unknown Patient";

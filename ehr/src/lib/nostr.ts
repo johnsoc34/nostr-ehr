@@ -1,6 +1,6 @@
-// @ts-nocheck
 /**
  * src/lib/nostr.ts
+ * Phase 5: Added getSharedSecret() for NIP-44 ECDH encryption
  */
 
 const P  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
@@ -109,7 +109,7 @@ export function getPublicKey(sk: Uint8Array):Uint8Array{
 }
 
 /**
- * ECDH shared secret for NIP-44 encryption..
+ * NEW in Phase 5: ECDH shared secret for NIP-44 encryption.
  * For solo practice: encrypt to self (sk + own pubkey = consistent shared secret).
  * For patient sharing: encrypt to patient pubkey.
  * Returns the x-coordinate of the shared EC point (32 bytes).
@@ -123,18 +123,18 @@ export function getSharedSecret(sk: Uint8Array, theirPubkeyHex: string): Uint8Ar
 }
 
 export const FHIR_KINDS = {
-  Patient:           1000,  // Changed from 10000 to avoid replaceable event behavior
-  Encounter:         1001,  // Changed from 10001
-  MedicationRequest: 1002,  // Changed from 10002
-  Observation:       1003,  // Changed from 10003
-  Condition:         1004,  // Changed from 10004
-  AllergyIntolerance: 1005,  
-  Immunization:      1006,  
-  Message:           1007,
-  ServiceRequest:    1008,  // ← ADD: lab + imaging orders
-  DiagnosticReport:  1009,  // ← ADD: results, links back to order via ["e", orderId, "", "result"] tag
-  RxOrder:           1010,
-  DocumentReference: 1011,  // encrypted file attachments (NIP-B7 Blossom)
+  Patient:            2110,  // demographics (was 1000)
+  Encounter:          2111,  // visit notes, addendums, nurse notes (was 1001)
+  MedicationRequest:  2112,  // meds + Rx (was 1002)
+  Observation:        2113,  // vitals (was 1003)
+  Condition:          2114,  // problem list (was 1004)
+  AllergyIntolerance: 2115,  // allergies (was 1005)
+  Immunization:       2116,  // immunizations (was 1006)
+  Message:            2117,  // bidirectional messaging (was 1007)
+  ServiceRequest:     2118,  // lab + imaging orders (was 1008)
+  DiagnosticReport:   2119,  // results, links via ["e", orderId, "", "result"] (was 1009)
+  RxOrder:            2120,  // reserved (was 1010)
+  DocumentReference:  2121,  // encrypted file attachments, NIP-B7 Blossom (was 1011)
 } as const;
 
 export interface NostrEvent {
@@ -150,7 +150,7 @@ export interface NostrEvent {
 
 export async function buildAndSignEvent(
   kind:      number,
-  content:   string,   
+  content:   string,   // Phase 5: pass already-encrypted string
   tags:      string[][],
   sk:        Uint8Array,
 ): Promise<NostrEvent> {
@@ -235,13 +235,13 @@ export async function verifyEvent(event: {
   }
 }
 
-// ─── Multi-User / Staff Access ─────────────────────────────────────
+// ─── Multi-User / Staff Access (Phase 18) ─────────────────────────────────────
 
 /** Event kinds for staff management — separate from clinical FHIR kinds */
 export const STAFF_KINDS = {
-  StaffRoster:       1014,   // regular event — latest by created_at wins (nostr-rs-relay 0.9.0 doesn't support replaceable parameterized kinds)
-  PatientKeyGrant:   1012,   // per-staff per-patient shared secret — practice-signed
-  PracticeKeyGrant:  1013,   // per-staff practice shared secret (X₁) — practice-signed
+  PatientKeyGrant:   2100,   // per-staff per-patient shared secret — practice-signed (was 1012)
+  PracticeKeyGrant:  2101,   // per-staff practice shared secret (X₁) — practice-signed (was 1013)
+  StaffRoster:       2102,   // regular event — latest by created_at wins (was 1014)
 } as const;
 
 /** Staff roles with increasing privilege levels */
@@ -251,13 +251,13 @@ export type StaffRole = "frontdesk" | "ma" | "nurse" | "doctor";
 export type StaffPermission =
   | "read"           // view patient charts and clinical data
   | "write"          // create encounters, document in charts
-  | "vitals"         // record observations (kind 1003)
-  | "messages"       // send/receive secure messages (kind 1007)
-  | "immunizations"  // record immunizations (kind 1006)
-  | "allergies"      // record allergies (kind 1005)
-  | "order"          // create ServiceRequests for labs/imaging (kind 1008)
-  | "prescribe"      // create MedicationRequests (kind 1002)
-  | "sign"           // sign/finalize encounters (kind 1001)
+  | "vitals"         // record observations (kind 2113)
+  | "messages"       // send/receive secure messages (kind 2117)
+  | "immunizations"  // record immunizations (kind 2116)
+  | "allergies"      // record allergies (kind 2115)
+  | "order"          // create ServiceRequests for labs/imaging (kind 2118)
+  | "prescribe"      // create MedicationRequests (kind 2112)
+  | "sign"           // sign/finalize encounters (kind 2111)
   | "admin"          // manage staff roster, key grants
   | "settings"       // access EHR settings panel
   | "schedule";      // view/manage calendar
