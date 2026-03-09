@@ -25,7 +25,7 @@ NostrEHR is a suite of 7 applications that work together:
 ### Data Flow
 
 ```
-Doctor (EHR) ──NIP-44 encrypt──▶ Self-hosted Nostr Relay ◀──NIP-44 decrypt── Patient (Portal)
+Doctor (EHR) ──NIP-44 encrypt──▶ Self-hosted Nostr Relay ◀───NIP-44 decrypt── Patient (Portal)
                                          │
                                     SQLite (relay DB)
                                     Encrypted at rest
@@ -51,17 +51,19 @@ The relay stores only encrypted blobs. Even with full database access, data is u
 
 ### Patient Portal
 - **Multi-practice capable** — patients connect to any NostrEHR practice with one identity
-- **Secure messaging** — encrypted provider-patient communication (kind 1007)
+- **Secure messaging** — encrypted provider-patient communication (kind 2117)
 - **Health record access** — view encounters, vitals, medications, immunizations, labs
 - **Data sovereignty** — Nostr export, FHIR R4 export, relay sync to personal relay
 - **WebAuthn/YubiKey login** — PRF-based passkey authentication
 
 ### Infrastructure
 - **Telehealth** — Nostr-signaled WebRTC video visits with TURN relay support
-- **Multi-user access** — per-staff keypairs with ECDH shared secrets (kinds 1012-1014)
+- **Multi-user access** — per-staff keypairs with ECDH shared secrets (kinds 2100-2102)
+- **Service agents** — dedicated server keypairs for billing (NIP-17 DMs) and FHIR API (kind 2103)
 - **Billing integration** — DPC membership management, NIP-17 encrypted invoice DMs
 - **FHIR REST API** — read-only R4 endpoints with API key auth and scoping
 - **Offline-first** — IndexedDB cache, write queue, sync reconciliation
+- **Calendar visit tracking** — clickable color workflow (checked-in, ready, complete, signed) with inline schedule comments
 - **PDF generation** — school excuse, immunization record, growth chart, sports physical, child care, kindergarten forms
 
 ### Security
@@ -69,29 +71,46 @@ The relay stores only encrypted blobs. Even with full database access, data is u
 - **NIP-42 relay authentication** with pubkey whitelist
 - **NIP-17 gift wraps** for billing DMs (sender-anonymous)
 - **Practice key cold storage** — daily operations use staff keypairs
+- **Service agent isolation** — server-side services use scoped keypairs, practice nsec never on server
 - **WebAuthn/YubiKey** authentication for EHR and portal
 - **15-minute session timeout** with security gate re-auth
 - **Patient keys never persisted** — shown once at creation, only npub stored
 
 ## Nostr Event Kinds
 
+### Organizational (NIP PR submitted)
 | Kind | Resource | Description |
 |------|----------|-------------|
-| 1000 | Patient | Demographics (name, DOB, sex) |
-| 1001 | Encounter | SOAP notes, nurse notes |
-| 1002 | MedicationRequest | Active/completed medications |
-| 1003 | Observation | Vitals (weight, height, BMI, BP, HR, temp, SpO2) |
-| 1004 | Condition | Problem list entries (SNOMED + ICD-10) |
-| 1005 | AllergyIntolerance | Drug, food, environmental allergies |
-| 1006 | Immunization | Vaccine administrations |
-| 1007 | Message | Encrypted provider-patient messaging |
-| 1008 | ServiceRequest | Lab/imaging orders |
-| 1009 | DiagnosticReport | Lab/imaging results |
-| 1010 | RxOrder | Prescription orders |
-| 1011 | DocumentReference | Encrypted file attachment metadata |
-| 1012 | PatientKeyGrant | Per-staff per-patient decryption grant |
-| 1013 | PracticeKeyGrant | Per-staff practice-wide decryption grant |
-| 1014 | StaffRoster | Encrypted staff member list and roles |
+| 2100 | PatientKeyGrant | Per-staff per-patient decryption grant |
+| 2101 | PracticeKeyGrant | Per-staff practice-wide decryption grant |
+| 2102 | StaffRoster | Encrypted staff member list and roles |
+| 2103 | ServiceAgentGrant | Authorizes server-side service keypairs |
+
+### Clinical
+| Kind | Resource | Description |
+|------|----------|-------------|
+| 2110 | Patient | Demographics (name, DOB, sex) |
+| 2111 | Encounter | SOAP notes, nurse notes |
+| 2112 | MedicationRequest | Active/completed medications |
+| 2113 | Observation | Vitals (weight, height, BMI, BP, HR, temp, SpO2) |
+| 2114 | Condition | Problem list entries (SNOMED + ICD-10) |
+| 2115 | AllergyIntolerance | Drug, food, environmental allergies |
+| 2116 | Immunization | Vaccine administrations |
+| 2117 | Message | Encrypted provider-patient messaging |
+| 2118 | ServiceRequest | Lab/imaging orders |
+| 2119 | DiagnosticReport | Lab/imaging results |
+| 2120 | RxOrder | Prescription orders |
+| 2121 | DocumentReference | Encrypted file attachment metadata |
+
+### Telehealth Signaling
+| Kind | Resource | Description |
+|------|----------|-------------|
+| 4050 | Lobby | Join/leave video call lobby |
+| 4051 | SDPOffer | WebRTC SDP offer (provider → patient) |
+| 4052 | SDPAnswer | WebRTC SDP answer (patient → provider) |
+| 4053 | ICECandidate | ICE candidates (bidirectional) |
+| 4054 | CallState | Mute/video toggle sync |
+| 4055 | CallEnd | Call ended (persistent for audit) |
 
 ## Patient Data Sovereignty
 
@@ -101,7 +120,7 @@ Because all clinical records are standard Nostr events containing FHIR R4 JSON, 
 
 - **Build a custom portal** — Fork `patient-portal/` and modify the UI, add features, or build a mobile app. The data layer is just Nostr subscriptions + NIP-44 decryption.
 - **Export to FHIR** — The built-in portal supports FHIR R4 Bundle export. Any FHIR-compatible system can ingest these records.
-- **Use any Nostr client** — Messages (kind 1007) and billing invoices (kind 1059) are readable in standard Nostr clients that support NIP-17.
+- **Use any Nostr client** — Messages (kind 2117) and billing invoices (kind 1059) are readable in standard Nostr clients that support NIP-17.
 - **Mirror to another relay** — Patients can republish their events to a personal relay for redundancy or to share with another provider.
 - **Write a client from scratch** — The data model is documented above. Any developer who understands Nostr and FHIR can build an alternative client.
 
@@ -119,7 +138,7 @@ To decrypt your records, compute the NIP-44 shared secret between your nsec and 
 A minimal patient client needs to:
 
 1. Connect to the practice relay via WebSocket
-2. Subscribe to events tagged with the patient's pubkey: `{"kinds": [1000,1001,1002,1003,1004,1005,1006,1007,1008,1009,1011], "#p": ["<patient_pubkey_hex>"]}`
+2. Subscribe to events tagged with the patient's pubkey: `{"kinds": [2110,2111,2112,2113,2114,2115,2116,2117,2118,2119,2121], "#p": ["<patient_pubkey_hex>"]}`
 3. For each event, decrypt the `patient-content` tag using NIP-44 with `getSharedSecret(patientSk, practicePubkey)`
 4. Parse the decrypted string as FHIR R4 JSON
 
