@@ -113,7 +113,7 @@ function AddChildModal({ T, parent, onClose, onSuccess }: any) {
   };
 
   const downloadKeys = () => {
-    const content = `${process.env.NEXT_PUBLIC_PRACTICE_NAME || "Your Practice"} - Patient Key\n\nChild: ${childKeys.name}\nDOB: ${childKeys.dateOfBirth}\n\nSECRET KEY (nsec):\n${childKeys.nsec}\n\nPUBLIC KEY (npub):\n${childKeys.npub}\n\n⚠️ IMPORTANT: Save this file securely. The secret key cannot be recovered if lost.`;
+    const content = `Immutable Health Pediatrics - Patient Key\n\nChild: ${childKeys.name}\nDOB: ${childKeys.dateOfBirth}\n\nSECRET KEY (nsec):\n${childKeys.nsec}\n\nPUBLIC KEY (npub):\n${childKeys.npub}\n\n⚠️ IMPORTANT: Save this file securely. The secret key cannot be recovered if lost.`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -256,23 +256,38 @@ function EditModal({ T, patient, onClose, onSuccess }: any) {
 
 function EnrollModal({ T, onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({
-    npub: '', 
-    name: '', 
-    email: '', 
-    monthlyFee: '150.00', 
+    npub: '',
+    name: '',
+    email: '',
+    monthlyFee: '150.00',
     memberSince: new Date().toISOString().split('T')[0]
   });
   const [submitting, setSubmitting] = useState(false);
+  const [npubError, setNpubError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmed = formData.npub.trim();
+    if (trimmed.startsWith("nsec1")) {
+      setNpubError("STOP \u2014 this is a SECRET KEY (nsec). Enter the PUBLIC key (npub) instead.");
+      return;
+    }
+    if (!trimmed.startsWith("npub1")) {
+      setNpubError("Must start with npub1");
+      return;
+    }
+    if (trimmed.length !== 63) {
+      setNpubError("Invalid npub \u2014 expected 63 characters");
+      return;
+    }
+    setNpubError("");
     setSubmitting(true);
     try {
       const res = await fetch('/api/patients/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          npub: formData.npub,
+          npub: trimmed,
           name: formData.name,
           email: formData.email,
           monthlyFee: Math.round(parseFloat(formData.monthlyFee) * 100),
@@ -283,10 +298,11 @@ function EnrollModal({ T, onClose, onSuccess }: any) {
         onSuccess();
         onClose();
       } else {
-        alert('Failed to enroll patient');
+        const errData = await res.json().catch(() => ({}));
+        setNpubError(errData.error || 'Failed to enroll patient');
       }
     } catch (err) {
-      alert('Error enrolling patient');
+      setNpubError('Network error \u2014 could not reach server');
     }
     setSubmitting(false);
   };
@@ -296,17 +312,20 @@ function EnrollModal({ T, onClose, onSuccess }: any) {
       <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, maxWidth: 500, width: "100%" }}>
         <div style={{ padding: 20, borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Enroll New Member</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 20 }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 20 }}>\u00d7</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: 24 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <label style={{ fontSize: 12, color: T.textMuted, fontWeight: 600, display: "block", marginBottom: 6 }}>Nostr Public Key (npub)</label>
-              <input required value={formData.npub} onChange={e => setFormData({ ...formData, npub: e.target.value })} placeholder="npub1..." style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceHi, color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+              <input required value={formData.npub} onChange={e => { setFormData({ ...formData, npub: e.target.value }); setNpubError(""); }} placeholder="npub1..." style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${npubError ? T.red : T.border}`, background: T.surfaceHi, color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+              {npubError && <div style={{ fontSize: 12, color: T.red, marginTop: 6, fontWeight: 600 }}>{npubError}</div>}
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>Paste the patient\u2019s npub from their EHR record. Never enter an nsec here.</div>
             </div>
             <div>
               <label style={{ fontSize: 12, color: T.textMuted, fontWeight: 600, display: "block", marginBottom: 6 }}>Full Name</label>
-              <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceHi, color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+              <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder='Last, First (e.g. "Doe, Jane")' style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceHi, color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>Format: Last, First \u2014 or "Jane Doe" (auto-converted)</div>
             </div>
             <div>
               <label style={{ fontSize: 12, color: T.textMuted, fontWeight: 600, display: "block", marginBottom: 6 }}>Email</label>
@@ -422,6 +441,7 @@ export default function PatientsPage() {
         <div style={{ marginBottom: 32 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
             <div>
+              <a href="/dashboard" style={{ color: T.textMuted, fontSize: 13, textDecoration: "none", marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 16 }}>←</span> Back to Dashboard</a>
               <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, marginBottom: 4 }}>Patient Management</h1>
               <p style={{ fontSize: 14, color: T.textMuted, margin: 0 }}>Manage DPC memberships and billing</p>
             </div>

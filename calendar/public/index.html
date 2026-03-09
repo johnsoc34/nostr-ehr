@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Schedule — NostrEHR</title>
+  <title>Schedule — Immutable Health</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -351,7 +351,7 @@
   <div class="logo">
     <div class="logo-mark">Ⅰ</div>
     <div>
-      <div class="logo-text">NostrEHR <span style="color:var(--muted);font-weight:500">Schedule</span></div>
+      <div class="logo-text">Immutable Health <span style="color:var(--muted);font-weight:500">Schedule</span></div>
     </div>
   </div>
   <div class="header-actions">
@@ -633,7 +633,7 @@ function renderMiniCalendar() {
     const ds = dateStr(date);
     const isToday = date.getTime() === today.getTime();
     const isSel = date.getTime() === selectedDate.getTime();
-    const hasAppts = monthAppointments[ds] && monthAppointments[ds].length > 0;
+    const hasAppts = monthAppointments[ds] && monthAppointments[ds].filter(a => a.status !== "cancelled" && a.status !== "declined").length > 0;
     const classes = ["day",
       isToday && !isSel ? "today" : "",
       isSel ? "selected" : "",

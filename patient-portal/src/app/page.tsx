@@ -1756,8 +1756,10 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
           text: replyBody.trim(), fromPatient: true, subject: replySubject, rootId: selectedThreadId
         }]);
         setReplyBody("");
+      } else {
+        alert("Reply failed to send. Please check your connection and try again.");
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); alert("Error sending reply. Please try again."); }
     finally { setSending(false); }
   };
 

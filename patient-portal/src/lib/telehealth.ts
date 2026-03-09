@@ -2,7 +2,7 @@
  * src/lib/telehealth.ts
  *
  * Telehealth signaling (Nostr) + WebRTC connection manager
- * for Nostr EHR telehealth video visits.
+ * for Immutable Health Pediatrics video visits.
  *
  * Works with both EHR (page.tsx) and Patient Portal (portal page.tsx).
  * Uses existing nostr.ts (buildAndSignEvent, getSharedSecret, toHex)
@@ -42,8 +42,8 @@ export const TELEHEALTH_KINDS = {
 } as const;
 
 // ─── ICE Server Config ───────────────────────────────────────────────────────
-const TURN_HOST = process.env.NEXT_PUBLIC_TURN_HOST || "";
-const TURN_USER = process.env.NEXT_PUBLIC_TURN_USER || "";
+const TURN_HOST = process.env.NEXT_PUBLIC_TURN_HOST || "turn.immutablehealthpediatrics.com";
+const TURN_USER = process.env.NEXT_PUBLIC_TURN_USER || "ihp-telehealth";
 const TURN_CRED = process.env.NEXT_PUBLIC_TURN_CRED || "";
 
 export const ICE_SERVERS: RTCIceServer[] = [
@@ -132,16 +132,25 @@ export class TelehealthSession {
   async joinLobby(videoEnabled = true, audioEnabled = true): Promise<MediaStream | null> {
     if (this.destroyed) throw new Error("Session destroyed");
 
+    // Warn if relay isn't connected — events won't publish
+    if (this.relay.status !== "connected") {
+      console.warn(`[Telehealth] joinLobby called but relay status is "${this.relay.status}" — signaling will fail`);
+    }
+
     // Subscribe to signaling FIRST — even if media fails, we need to hear the other party
     this.subscribeToSignaling();
 
     // Publish lobby join BEFORE getUserMedia — so the other party knows we're here
-    await this.publishSignaling(TELEHEALTH_KINDS.Lobby, {
+    const published = await this.publishSignaling(TELEHEALTH_KINDS.Lobby, {
       action: "join",
       role: this.role,
       appointmentId: this.appointmentId,
       timestamp: Date.now(),
     });
+
+    if (!published) {
+      console.warn("[Telehealth] Initial lobby publish failed — relay may not be accepting events from this pubkey");
+    }
 
     this.lobbyState.localJoined = true;
     this.callbacks.onLobbyState({ ...this.lobbyState });
@@ -260,6 +269,13 @@ export class TelehealthSession {
 
   // ─── Signaling (Nostr) ──────────────────────────────────────────────
 
+  // Reverse lookup for logging
+  private static KIND_NAMES: Record<number, string> = Object.fromEntries(
+    Object.entries(TELEHEALTH_KINDS).map(([name, kind]) => [kind, name])
+  );
+
+  private publishFailCount = 0;
+
   private async publishSignaling(kind: number, payload: object): Promise<boolean> {
     const plaintext = JSON.stringify(payload);
     const encrypted = await nip44Encrypt(plaintext, this.sharedX);
@@ -275,7 +291,21 @@ export class TelehealthSession {
     }
 
     const event = await buildAndSignEvent(kind, encrypted, tags, this.sk);
-    return this.relay.publish(event);
+    const ok = await this.relay.publish(event);
+
+    if (!ok) {
+      const kindName = TelehealthSession.KIND_NAMES[kind] || String(kind);
+      console.warn(`[Telehealth] Publish FAILED: kind=${kindName} (${kind}), relay.status=${this.relay.status}, pubkey=${this.localPkHex.slice(0, 8)}...`);
+      this.publishFailCount++;
+      // Surface error to user after 3 consecutive failures (not just transient blips)
+      if (this.publishFailCount >= 3 && kind === TELEHEALTH_KINDS.Lobby) {
+        this.callbacks.onError("Unable to connect to relay. Your account may not be authorized — contact your practice.");
+      }
+    } else {
+      this.publishFailCount = 0;
+    }
+
+    return ok;
   }
 
   private subscribeToSignaling() {

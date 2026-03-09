@@ -1864,6 +1864,7 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
   ];
   
   const handleRekey=async()=>{
+    if(!canDo("admin")){alert("Re-key requires doctor/admin permission.");return;}
     if(!confirm(
       "⚠️ Re-key this patient? This will:\n\n"+
       "1. Generate a new keypair (new nsec + npub)\n"+
@@ -2027,9 +2028,10 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
               navigator.clipboard.writeText(patient.npub||"");
               alert(`Public key (npub) copied:\n${patient.npub}\n\nUse this for billing system.`);
             }}>📋 Copy npub</Btn>
-            <Btn small col="#f59e0b" onClick={handleRekey}>
+            <Btn small col="#f59e0b" onClick={handleRekey} disabled={!canDo("admin")}>
               🔄 Re-key patient
             </Btn>
+            {!canDo("admin")&&<span style={{fontSize:10,color:"#64748b"}}>Doctor only</span>}
           </div>
         </div>
       )}
@@ -6802,12 +6804,13 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
 
       {/* Chart tabs */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#0f172a",borderBottom:"1px solid #1e293b",marginBottom:16}}>
-        <div style={{display:"flex"}}>
+        <div style={{display:"flex",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none",flex:1,WebkitOverflowScrolling:"touch"} as React.CSSProperties}>
           {tabs.map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)} style={{
               padding:"10px 16px",border:"none",cursor:"pointer",fontFamily:"inherit",
               background:"transparent",borderBottom:tab===id?"2px solid #0ea5e9":"2px solid transparent",
               color:tab===id?"#e0f2fe":"#64748b",fontSize:12,fontWeight:tab===id?600:400,
+              whiteSpace:"nowrap",flexShrink:0,
             }}>{label}</button>
           ))}
         </div>
