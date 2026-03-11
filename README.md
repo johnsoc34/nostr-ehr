@@ -38,8 +38,11 @@ All clinical data is encrypted with NIP-44 dual encryption before leaving the EH
 The relay stores only encrypted blobs. Even with full database access, data is unreadable without the private keys.
 
 ## Features
+<img width="2411" height="1207" alt="image" src="https://github.com/user-attachments/assets/122110d9-393d-472f-9e59-394470fdca04" />
 
 ### Clinical
+<img width="2398" height="1201" alt="image" src="https://github.com/user-attachments/assets/09ae9b76-334f-42fc-9bda-44165c9f5049" />
+
 - **Encounters** — SOAP notes with dot phrase templates, encounter signing, addendums
 - **Problem List** — SNOMED + ICD-10 coded conditions with append-only status tracking
 - **Medications** — active/inactive tracking, allergy-interaction alerts
@@ -50,6 +53,10 @@ The relay stores only encrypted blobs. Even with full database access, data is u
 - **Clinical Decision Support** — immunization gap detection, well-child visit tracking
 
 ### Patient Portal
+<img width="517" height="720" alt="image" src="https://github.com/user-attachments/assets/92d6a54c-5d40-4382-918f-a505411b213d" />
+<img width="1042" height="820" alt="image" src="https://github.com/user-attachments/assets/f63ccd51-2795-4358-b60c-e9496bfa186b" />
+<img width="991" height="803" alt="image" src="https://github.com/user-attachments/assets/46ec86b1-0897-42b7-a715-5ae6db79fb83" />
+
 - **Multi-practice capable** — patients connect to any NostrEHR practice with one identity
 - **Secure messaging** — encrypted provider-patient communication (kind 2117)
 - **Health record access** — view encounters, vitals, medications, immunizations, labs
