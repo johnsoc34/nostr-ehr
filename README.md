@@ -56,6 +56,9 @@ The relay stores only encrypted blobs. Even with full database access, data is u
 - **Data sovereignty** — Nostr export, FHIR R4 export, relay sync to personal relay
 - **WebAuthn/YubiKey login** — PRF-based passkey authentication
 
+See [Patient Portal Setup](patient-portal/SETUP.md) for login instructions and deployment guide.
+
+
 ### Infrastructure
 - **Telehealth** — Nostr-signaled WebRTC video visits with TURN relay support
 - **Multi-user access** — per-staff keypairs with ECDH shared secrets (kinds 2100-2102)
@@ -143,6 +146,8 @@ A minimal patient client needs to:
 4. Parse the decrypted string as FHIR R4 JSON
 
 The `patient-portal/src/lib/` directory contains reference implementations of the Nostr connection, NIP-44 decryption, and FHIR data handling.
+
+For the complete interoperability specification — including FHIR payload schemas, required tags, and connection string formats — see [INTEROPERABILITY.md](patient-portal/INTEROPERABILITY.md).
 
 ## Quick Start
 
