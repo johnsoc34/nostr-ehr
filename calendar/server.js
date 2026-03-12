@@ -1,5 +1,5 @@
 /**
- * server.js — NostrEHR Calendar Service
+ * server.js — Immutable Health Calendar Service
  * Runs on port 3002
  */
 
@@ -12,6 +12,10 @@ const { sendReminders } = require("./reminders");
 
 const app  = express();
 const PORT = process.env.PORT || 3003;
+
+
+// Licensed states for virtual consultations (Phase 5)
+const LICENSED_STATES = (process.env.LICENSED_STATES || "").split(",").map(s => s.trim().toUpperCase());
 
 app.use(cors({ origin: "*" }));
 app.use(express.json());
@@ -45,7 +49,7 @@ app.get("/login", (req, res) => {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>NostrEHR Calendar</title>
+<title>Immutable Health Calendar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -85,7 +89,7 @@ app.get("/login", (req, res) => {
 <div class="bg"></div>
 <div class="card">
   <div class="logo">📅</div>
-  <div class="title">NostrEHR</div>
+  <div class="title">Immutable Health</div>
   <div class="sub">Calendar &amp; Scheduling</div>
   ${err}
   <form method="POST" action="/login">
@@ -291,6 +295,8 @@ app.post("/api/appointments", (req, res) => {
       notes: notes || null,
       video_url: video_url || null,
       is_auto_booked: 0,
+      visit_color: null,
+      schedule_comment: null,
     });
     res.json({ id: result.lastInsertRowid, status: "confirmed" });
   } catch (e) {
@@ -311,11 +317,22 @@ app.patch("/api/appointments/:id/status", (req, res) => {
   }
 });
 
+// PATCH /api/appointments/:id/visit — update visit_color and/or schedule_comment
+app.patch("/api/appointments/:id/visit", (req, res) => {
+  try {
+    const { visit_color, schedule_comment } = req.body;
+    db.updateVisitTracking(req.params.id, { visit_color, schedule_comment });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PUT /api/appointments/:id — full update
 app.put("/api/appointments/:id", (req, res) => {
   try {
-    const { date, start_time, end_time, appt_type, notes, video_url, status } = req.body;
-    db.updateAppointment(req.params.id, { date, start_time, end_time, appt_type, notes, video_url, status });
+    const { date, start_time, end_time, appt_type, notes, video_url, status, visit_color, schedule_comment } = req.body;
+    db.updateAppointment(req.params.id, { date, start_time, end_time, appt_type, notes, video_url, status, visit_color: visit_color || null, schedule_comment: schedule_comment || null });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -344,6 +361,101 @@ app.post("/api/reminders/send", async (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+
+
+// ─── Virtual Visit Intake (Phase 5) ──────────────────────────────────────────
+
+// Public endpoint — no auth required
+app.post("/api/intake", (req, res) => {
+  try {
+    const { name, email, phone, date_of_birth, state, chief_complaint,
+            preferred_date, preferred_time, npub } = req.body;
+    if (!name || !state)
+      return res.status(400).json({ error: "name and state are required" });
+    const stateUpper = state.trim().toUpperCase();
+    if (!LICENSED_STATES.includes(stateUpper))
+      return res.status(403).json({
+        error: "We are not licensed to provide care in " + stateUpper + ". Licensed states: " + LICENSED_STATES.join(", "),
+      });
+    const result = db.createIntakeRequest({
+      name: name.trim(),
+      email: email?.trim() || null,
+      phone: phone?.trim() || null,
+      date_of_birth: date_of_birth || null,
+      state: stateUpper,
+      chief_complaint: chief_complaint?.trim() || null,
+      preferred_date: preferred_date || null,
+      preferred_time: preferred_time || null,
+      npub: npub?.trim() || null,
+    });
+    console.log("[intake] New request from " + name + " (" + stateUpper + ")" + (npub ? " npub: " + npub.substring(0, 20) + "..." : ""));
+    res.json({ id: result.lastInsertRowid, status: "pending",
+      message: "Your consultation request has been submitted. We will contact you to confirm." });
+  } catch (e) {
+    console.error("[intake] Error:", e.message);
+    res.status(500).json({ error: "Failed to submit request" });
+  }
+});
+
+app.get("/api/intake/pending", (req, res) => {
+  try { res.json(db.getPendingIntake()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/intake", (req, res) => {
+  try { res.json(db.getAllIntake(parseInt(req.query.limit) || 50)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/intake/:id", (req, res) => {
+  try {
+    const intake = db.getIntakeById(req.params.id);
+    if (!intake) return res.status(404).json({ error: "Not found" });
+    res.json(intake);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/intake/:id/approve", (req, res) => {
+  try {
+    const intake = db.getIntakeById(req.params.id);
+    if (!intake) return res.status(404).json({ error: "Not found" });
+    if (intake.status !== "pending") return res.status(400).json({ error: "Already processed" });
+    const { date, start_time, end_time, appt_type } = req.body;
+    if (!date || !start_time || !end_time)
+      return res.status(400).json({ error: "date, start_time, end_time required" });
+    const apptResult = db.createAppointment({
+      patient_npub: intake.npub || "pending-intake-" + intake.id,
+      patient_name: intake.name,
+      patient_phone: intake.phone || null,
+      date, start_time, end_time,
+      appt_type: appt_type || "video",
+      status: "confirmed",
+      notes: intake.chief_complaint ? "Chief complaint: " + intake.chief_complaint : null,
+      video_url: null, is_auto_booked: 0, visit_color: null, schedule_comment: null,
+    });
+    db.updateIntakeStatus(intake.id, "approved", { appointment_id: apptResult.lastInsertRowid });
+    console.log("[intake] Approved #" + intake.id + " (" + intake.name + ") -> appointment #" + apptResult.lastInsertRowid);
+    res.json({ intake_id: intake.id, appointment_id: apptResult.lastInsertRowid, status: "approved" });
+  } catch (e) {
+    console.error("[intake] Approve error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/intake/:id/decline", (req, res) => {
+  try {
+    const intake = db.getIntakeById(req.params.id);
+    if (!intake) return res.status(404).json({ error: "Not found" });
+    if (intake.status !== "pending") return res.status(400).json({ error: "Already processed" });
+    db.updateIntakeStatus(intake.id, "declined", { decline_reason: req.body.reason || null });
+    console.log("[intake] Declined #" + intake.id + " (" + intake.name + ")");
+    res.json({ intake_id: intake.id, status: "declined" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/licensed-states", (req, res) => {
+  res.json({ states: LICENSED_STATES });
+});
 
 app.listen(PORT, () => {
   console.log(`[calendar] Service running on port ${PORT}`);

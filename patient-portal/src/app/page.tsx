@@ -2981,6 +2981,33 @@ function MyDataView({ keys, relay, practicePk, practiceName, connections, T }: {
     <div>
       <SectionHeader title="My Data" icon="🔑" T={T} />
 
+      {/* Identity card */}
+      <div style={{ ...card(T), borderLeft: `3px solid ${T.green}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>🪪 Your Nostr Identity</div>
+          <button onClick={() => { navigator.clipboard.writeText(keys.npub || ""); }} style={{
+            background: T.surfaceHi, border: `1px solid ${T.border}`, borderRadius: 6,
+            padding: "4px 10px", fontSize: 11, fontWeight: 600, color: T.textMuted,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>📋 Copy npub</button>
+        </div>
+        <div style={{
+          padding: "8px 12px", background: T.surfaceHi, border: `1px solid ${T.border}`,
+          borderRadius: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11,
+          color: T.text, wordBreak: "break-all" as const, lineHeight: 1.6,
+        }}>
+          {keys.npub}
+        </div>
+        {keys.name && (
+          <div style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>
+            Logged in as <span style={{ color: T.text, fontWeight: 600 }}>{keys.name}</span>
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+          This is your public key. Share it with any Nostr-based provider to give them access to your records. Your private key (nsec) never leaves your device.
+        </div>
+      </div>
+
       {/* Explainer */}
       <div style={{ ...card(T), borderLeft: `3px solid ${T.accent}` }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 6 }}>Your Records, Your Control</div>

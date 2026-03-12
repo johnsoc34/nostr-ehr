@@ -28,6 +28,7 @@ If your practice runs NostrEHR, you can access your records at their portal URL 
 
 Your records are encrypted with your personal key. Your practice has their copy, and you have yours — neither party needs permission from the other to access their copy. If you switch providers, your data goes with you.
 
+You can view your records at any compatible portal — including [portal.immutablehealthpediatrics.com](https://portal.immutablehealthpediatrics.com).
 ---
 
 ## For Practice Administrators

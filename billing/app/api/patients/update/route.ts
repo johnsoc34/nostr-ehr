@@ -3,9 +3,8 @@ import { getDb } from '@/lib/db';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { patientId, status, name, email, monthlyFee, is_test_patient } = body;
+    const { patientId, status, name, email, monthlyFee, is_test_patient, patientType } = body;
     const db = await getDb();
-    // Build update query dynamically based on what's provided
     const updates = [];
     const values = [];
     if (status !== undefined) {
@@ -27,6 +26,10 @@ export async function POST(req: NextRequest) {
     if (is_test_patient !== undefined) {
       updates.push('is_test_patient = ?');
       values.push(is_test_patient ? 1 : 0);
+    }
+    if (patientType !== undefined) {
+      updates.push('patient_type = ?');
+      values.push(patientType);
     }
     if (updates.length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

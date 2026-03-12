@@ -15,19 +15,19 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { npub } = await req.json();
-    
+    const body = await req.json();
+    const { npub, billing_model } = body;
+
     if (!npub) {
       return NextResponse.json(
         { error: 'npub required' },
         { status: 400, headers: corsHeaders }
       );
     }
-    
+
     const db = await getDb();
-    
     const patient = await db.get('SELECT * FROM patients WHERE npub = ?', [npub]);
-    
+
     if (!patient) {
       await db.close();
       return NextResponse.json(
@@ -35,28 +35,31 @@ export async function POST(req: NextRequest) {
         { status: 404, headers: corsHeaders }
       );
     }
-    
-    // Mark as synced AND activate (unless they're an account holder)
-    const newStatus = patient.is_account_holder ? 'active' : 'active';
-    
+
+    const isPerVisit = billing_model === 'per-visit';
+
+    // Mark as synced AND activate
+    // Per-visit patients: set patient_type, zero out monthly fee
     await db.run(`
-      UPDATE patients 
-      SET ehr_synced = 1, 
+      UPDATE patients
+      SET ehr_synced = 1,
           ehr_synced_at = CURRENT_TIMESTAMP,
-          status = ?
+          status = 'active',
+          patient_type = ?,
+          monthly_fee = CASE WHEN ? = 'per-visit' THEN 0 ELSE monthly_fee END
       WHERE npub = ?
-    `, [newStatus, npub]);
-    
+    `, [isPerVisit ? 'per-visit' : 'monthly', isPerVisit ? 'per-visit' : 'monthly', npub]);
+
     await db.close();
-    
-    console.log(`✓ Patient ${patient.name} synced to EHR and activated`);
-    
+
+    console.log(`✓ Patient ${patient.name} synced to EHR and activated (${isPerVisit ? 'per-visit' : 'monthly'})`);
+
     return NextResponse.json({
       success: true,
-      message: 'Patient synced to EHR and activated',
+      message: `Patient synced to EHR and activated (${isPerVisit ? 'per-visit' : 'monthly'})`,
       patient: patient.name
     }, { headers: corsHeaders });
-    
+
   } catch (error) {
     console.error('Error confirming EHR sync:', error);
     return NextResponse.json(

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 
 const CORS = {
-  'Access-Control-Allow-Origin': process.env.PORTAL_URL || 'https://portal.example.com',
+  'Access-Control-Allow-Origin': 'https://portal.immutablehealthpediatrics.com',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };

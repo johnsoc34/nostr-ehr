@@ -20,11 +20,12 @@ export async function GET() {
       FROM patients
     `);
 
-    // --- MRR (Monthly Recurring Revenue from active + hoh + delinquent) ---
+    // --- MRR (Monthly Recurring Revenue — monthly patients only) ---
     const mrrResult = await db.get(`
       SELECT COALESCE(SUM(monthly_fee), 0) as mrr
       FROM patients
       WHERE status IN ('active', 'head_of_household', 'delinquent')
+        AND (patient_type = 'monthly' OR patient_type IS NULL)
     `);
 
     // --- Outstanding balance ---
@@ -93,27 +94,56 @@ export async function GET() {
       SELECT COUNT(*) as count FROM signups WHERE status = 'pending'
     `);
 
+    // --- Per-visit stats ---
+    const perVisitCounts = await db.get(`
+      SELECT
+        SUM(CASE WHEN patient_type = 'per-visit' THEN 1 ELSE 0 END) as per_visit,
+        SUM(CASE WHEN patient_type = 'monthly' OR patient_type IS NULL THEN 1 ELSE 0 END) as monthly
+      FROM patients
+      WHERE is_test_patient = 0 OR is_test_patient IS NULL
+    `);
+
+    const perVisitRevenue = await db.get(`
+      SELECT COALESCE(SUM(i.amount), 0) as total
+      FROM invoices i
+      JOIN patients p ON i.patient_id = p.id
+      WHERE i.status = 'paid' AND p.patient_type = 'per-visit'
+    `);
+
+    const perVisitOutstanding = await db.get(`
+      SELECT COALESCE(SUM(i.amount), 0) as total
+      FROM invoices i
+      JOIN patients p ON i.patient_id = p.id
+      WHERE i.status IN ('unpaid', 'overdue') AND p.patient_type = 'per-visit'
+    `);
+
     await db.close();
 
     return NextResponse.json({
       members: {
         total: memberCounts.total,
-        active: memberCounts.active + memberCounts.hoh, // active + head_of_household
+        active: memberCounts.active + memberCounts.hoh,
         delinquent: memberCounts.delinquent || 0,
         lapsed: memberCounts.lapsed || 0,
         pending: memberCounts.pending || 0,
         testPatients: memberCounts.test_patients || 0,
       },
       financials: {
-        mrr: mrrResult.mrr,             // in cents
-        outstanding: outstandingResult.total,  // in cents
-        collected: collected.total,       // in cents
+        mrr: mrrResult.mrr,
+        outstanding: outstandingResult.total,
+        collected: collected.total,
       },
       invoices: {
         total: invoiceCounts.total,
         paid: invoiceCounts.paid || 0,
         unpaid: invoiceCounts.unpaid || 0,
         overdue: invoiceCounts.overdue || 0,
+      },
+      perVisit: {
+        patients: perVisitCounts?.per_visit || 0,
+        monthlyPatients: perVisitCounts?.monthly || 0,
+        revenue: perVisitRevenue?.total || 0,
+        outstanding: perVisitOutstanding?.total || 0,
       },
       revenueByMonth,
       recentInvoices,

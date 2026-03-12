@@ -11,8 +11,8 @@ import { buildEncounter, buildMedicationRequest, buildAllergyIntolerance, buildI
          buildServiceRequest, buildDiagnosticReport, buildRxOrder, buildCondition, buildDocumentReference } from "../lib/fhir";
 import { nip44Encrypt, nip44Decrypt } from "../lib/nip44";
 import { dualEncrypt, dualEncryptWithSecrets, dualDecryptWithSecret, buildDualEncryptedTags } from "../lib/dual-encryption";
-import { loadPatients, savePatients, addPatient, updatePatient,
-         ageFromDob, type Patient } from "../lib/patients";
+import { loadPatients, savePatients, addPatient, addPatientByNpub, updatePatient, clearStoredNsec,
+         ageFromDob, type Patient, type PatientCreationResult } from "../lib/patients";
 import { getWHOWeightCurves, getCDCWeightCurves } from "../lib/growth";
 import { PEDIATRIC_DIAGNOSES } from "../lib/terminology";
 import { cacheEvent, cacheEvents, getCachedEvents, getCachedEventsByKind, getLastSync, setLastSync, getCacheStats, clearCache, queueEvent, getQueuedEvents, removeQueuedEvent, getQueueCount, type CachedEvent, type QueuedEvent } from "../lib/cache";
@@ -1450,57 +1450,94 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
 
 // ─── Add Patient Form ─────────────────────────────────────────────────────────
 function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onCancel:()=>void;keys:Keypair;relay:ReturnType<typeof useRelay>}){
+  // Mode: "new" = practice generates keys, "existing" = patient brings npub
+  const [mode,setMode]=useState<"new"|"existing">("new");
   const [form,setForm]=useState({
     name:"",dob:"",sex:"female" as Patient["sex"],
-    phone:"",email:"",address:"",city:"",state:"",zip:"",existingNsec:""
+    phone:"",email:"",address:"",city:"",state:"",zip:"",
+    existingNsec:"",npub:"",billingModel:"monthly" as "monthly"|"per-visit",
+    storeNsec:false
   });
   const [created,setCreated]=useState<Patient|null>(null);
-  const [createdNsec,setCreatedNsec]=useState<string>(""); // held in memory only — never persisted
+  const [createdNsec,setCreatedNsec]=useState<string>("");
+  const [npubError,setNpubError]=useState("");
   const set=(k:string,v:string)=>setForm(f=>({...f,[k]:v}));
-  const canSubmit=form.name.trim()&&form.dob;
-
+ 
+  const canSubmit = mode === "new"
+    ? form.name.trim() && form.dob
+    : form.name.trim() && form.npub.trim().startsWith("npub1");
+ 
   const handleCreate=async()=>{
-  const p=addPatient(form);
-  
-  // Hold nsec in memory for the one-time display card
-  setCreatedNsec(p.nsec||"");
-  
-  // Strip nsec from the patient record before persisting
-  const stripped={...p,nsec:undefined};
-  updatePatient(stripped);
-  setCreated(stripped);
-  
-  // Publish demographics to relay (kind 2110)
-  publishPatientDemographics(stripped, keys, relay);
-
-  // Publish patient key grants to all active staff (kind 2100)
-  publishPatientGrantsForStaff(stripped, keys, relay);
-
-  // Auto-grant FHIR reader agent access to new patient
-  publishPatientGrantForFhirAgent(stripped, keys, relay);
-
-  // Sync to billing system
-  if(stripped.npub){
-    try{
-      await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({npub:stripped.npub})
+    if(mode==="existing"){
+      // ── Self-keyed patient: import by npub ──
+      try{
+        const patient=addPatientByNpub({
+          name:form.name, dob:form.dob||undefined, sex:(form.sex as Patient["sex"])||undefined,
+          phone:form.phone||undefined, email:form.email||undefined,
+          address:form.address||undefined, city:form.city||undefined,
+          state:form.state||undefined, zip:form.zip||undefined,
+          npub:form.npub.trim(),
+          billingModel:form.billingModel,
+        });
+        setCreated(patient);
+ 
+        // Publish demographics to relay (kind 2110)
+        publishPatientDemographics(patient, keys, relay);
+        // Publish patient key grants to all active staff
+        publishPatientGrantsForStaff(patient, keys, relay);
+        // Auto-grant FHIR reader agent access
+        publishPatientGrantForFhirAgent(patient, keys, relay);
+ 
+        // Sync to billing (only for monthly members)
+        if(patient.billingModel==="monthly" && patient.npub && BILLING_URL){
+          try{
+            await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel})
+            });
+          }catch(err){ console.error('Failed to sync to billing:',err); }
+        }
+      }catch(err){
+        setNpubError(err instanceof Error ? err.message : "Invalid npub");
+        return;
+      }
+    } else {
+      // ── Practice-keyed patient: generate or import keypair ──
+      const { patient, nsec } = addPatient({
+        ...form,
+        storeNsec: form.storeNsec,
+        billingModel: form.billingModel,
       });
-      console.log('✓ Patient synced to billing system');
-    }catch(err){
-      console.error('Failed to sync to billing:',err);
+      setCreatedNsec(nsec);
+      setCreated(patient);
+ 
+      // Publish demographics to relay (kind 2110)
+      publishPatientDemographics(patient, keys, relay);
+      // Publish patient key grants to all active staff
+      publishPatientGrantsForStaff(patient, keys, relay);
+      // Auto-grant FHIR reader agent access
+      publishPatientGrantForFhirAgent(patient, keys, relay);
+ 
+      // Sync to billing (only for monthly members)
+      if(patient.billingModel==="monthly" && patient.npub && BILLING_URL){
+        try{
+          await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({npub:patient.npub})
+          });
+        }catch(err){ console.error('Failed to sync to billing:',err); }
+      }
     }
-  }
-};
-
-  if(created){
+  };
+ 
+  // ── Post-creation card: practice-keyed patient (show nsec) ──
+  if(created && created.keySource==="practice"){
     return(
       <div style={{...S.card,border:"1px solid #166534",background:"#052e16"}}>
         <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Patient Created</div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:13,color:"#e2e8f0",marginBottom:4}}>{created.name}</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>DOB: {created.dob}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>DOB: {created.dob} • {created.billingModel==="monthly"?"Monthly Member":"Per-Visit"}</div>
         </div>
         
         <div style={{...S.card,background:"#0f172a",padding:16}}>
@@ -1513,14 +1550,16 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
           <div style={{...S.mono,background:"#1e293b",padding:12,fontSize:10,marginBottom:12,userSelect:"all" as const}}>
             {createdNsec}
           </div>
-          <div style={{fontSize:10,color:"#f87171",fontStyle:"italic",marginBottom:8}}>
-            ⚠️ This code is shown once and will NOT be stored in the chart. If lost, use Re-key to generate a new one.
+          <div style={{fontSize:10,color:created.nsecStored?"#4ade80":"#f87171",fontStyle:"italic",marginBottom:8}}>
+            {created.nsecStored
+              ? "✓ Access code stored locally (can be revealed in Portal Access panel)"
+              : "⚠️ This code is shown once and will NOT be stored. If lost, use Re-key to generate a new one."}
           </div>
         </div>
-
+ 
         <div style={{display:"flex",gap:8,marginTop:16}}>
         <Btn solid col="#0ea5e9" onClick={()=>{
-          if(!confirm("Have you saved the patient's access code? It will not be shown again.")) return;
+          if(!created.nsecStored && !confirm("Have you saved the patient's access code? It will not be shown again.")) return;
           onAdd(created);
         }}>Continue</Btn>
   
@@ -1537,17 +1576,115 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
       </div>
     );
   }
-
+ 
+  // ── Post-creation card: self-keyed patient (show connection string) ──
+  if(created && created.keySource==="self"){
+    const connectionString = JSON.stringify({
+      practice_name: PRACTICE_NAME,
+      relay: RELAY_URL,
+      practice_pk: PRACTICE_PUBKEY,
+      ...(BILLING_URL ? { billing_api: BILLING_URL } : {}),
+      ...(CALENDAR_URL ? { calendar_api: CALENDAR_URL } : {}),
+    }, null, 2);
+ 
+    return(
+      <div style={{...S.card,border:"1px solid #166534",background:"#052e16"}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Patient Added</div>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:13,color:"#e2e8f0",marginBottom:4}}>{created.name}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>
+            npub: {created.npub?.substring(0,20)}... • {created.billingModel==="monthly"?"Monthly Member":"Per-Visit"}
+          </div>
+        </div>
+ 
+        <div style={{...S.card,background:"#0f172a",padding:16}}>
+          <div style={{fontWeight:600,fontSize:12,color:"#7dd3fc",marginBottom:8}}>
+            🔗 Practice Connection String
+          </div>
+          <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}>
+            Give this to the patient so they can add your practice in their portal. They manage their own keys — no access code needed.
+          </div>
+          <div style={{...S.mono,background:"#1e293b",padding:12,fontSize:9,marginBottom:12,userSelect:"all" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
+            {connectionString}
+          </div>
+        </div>
+ 
+        <div style={{display:"flex",gap:8,marginTop:16}}>
+          <Btn solid col="#0ea5e9" onClick={()=>onAdd(created)}>Continue</Btn>
+          <Btn col="#7dd3fc" onClick={()=>{
+            navigator.clipboard.writeText(connectionString);
+            alert("Connection string copied to clipboard");
+          }}>📋 Copy Connection String</Btn>
+          <Btn col="#7dd3fc" onClick={()=>{
+            navigator.clipboard.writeText(created.npub||"");
+            alert("npub copied to clipboard");
+          }}>📋 Copy npub</Btn>
+        </div>
+      </div>
+    );
+  }
+ 
+  // ── The form ──
   return(
     <div style={{...S.card,border:"1px solid #1e3a5f"}}>
       <div style={{fontWeight:700,fontSize:14,marginBottom:16}}>➕ Add New Patient</div>
+ 
+      {/* Mode toggle */}
+      <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"1px solid #334155"}}>
+        {([["new","New Patient"],["existing","Existing Nostr Patient"]] as const).map(([m,label])=>(
+          <button key={m} onClick={()=>{setMode(m);setNpubError("");}} style={{
+            flex:1,padding:"8px 12px",fontSize:12,fontWeight:600,
+            background:mode===m?"#1e3a5f":"#0f172a",color:mode===m?"#7dd3fc":"#64748b",
+            border:"none",cursor:"pointer",fontFamily:"inherit",
+            transition:"all 0.15s",
+          }}>{label}</button>
+        ))}
+      </div>
+ 
+      {/* Billing model selector */}
+      <div style={{marginBottom:12}}>
+        <label style={S.lbl}>Billing Model</label>
+        <div style={{display:"flex",gap:8}}>
+          {([["monthly","Monthly Member"],["per-visit","Per-Visit"]] as const).map(([v,label])=>(
+            <button key={v} onClick={()=>setForm(f=>({...f,billingModel:v}))} style={{
+              flex:1,padding:"7px 12px",fontSize:12,fontWeight:600,borderRadius:6,
+              background:form.billingModel===v?"#164e63":"#0f172a",
+              color:form.billingModel===v?"#22d3ee":"#64748b",
+              border:`1px solid ${form.billingModel===v?"#22d3ee":"#334155"}`,
+              cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s",
+            }}>{label}</button>
+          ))}
+        </div>
+      </div>
+ 
+      {/* npub field (existing mode only) */}
+      {mode==="existing"&&(
+        <div style={{marginBottom:12,padding:12,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"#7dd3fc",marginBottom:8}}>
+            🔑 Patient's Public Key
+          </div>
+          <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+            The patient provides their npub. You never need their secret key.
+          </div>
+          <textarea
+            value={form.npub}
+            onChange={e=>{set("npub",e.target.value);setNpubError("");}}
+            placeholder="npub1..."
+            rows={2}
+            style={{...S.input,resize:"none",fontFamily:"monospace",fontSize:11}}
+          />
+          {npubError&&<div style={{color:"#f87171",fontSize:11,marginTop:6}}>{npubError}</div>}
+        </div>
+      )}
+ 
+      {/* Demographics */}
       <div style={S.grid2}>
         <div>
           <label style={S.lbl}>Full Name *</label>
           <input value={form.name} onChange={e=>set("name",e.target.value)} style={S.input} placeholder="Last, First"/>
         </div>
         <div>
-          <label style={S.lbl}>Date of Birth *</label>
+          <label style={S.lbl}>Date of Birth {mode==="new"?"*":""}</label>
           <input type="date" value={form.dob} onChange={e=>set("dob",e.target.value)} style={S.input}/>
         </div>
       </div>
@@ -1570,22 +1707,42 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         <label style={S.lbl}>Email</label>
         <input value={form.email} onChange={e=>set("email",e.target.value)} style={S.input} placeholder="patient@email.com"/>
       </div>
-      <div style={{marginTop:16,padding:12,background:"#1e1040",border:"1px solid #7c3aed",borderRadius:8}}>
-        <div style={{fontSize:11,fontWeight:600,color:"#c4b5fd",marginBottom:8}}>
-          🔑 Existing Patient Key (Optional)
+ 
+      {/* Existing nsec field (new mode only) */}
+      {mode==="new"&&(
+        <div style={{marginTop:16,padding:12,background:"#1e1040",border:"1px solid #7c3aed",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"#c4b5fd",marginBottom:8}}>
+            🔑 Existing Patient Key (Optional)
+          </div>
+          <div style={{fontSize:10,color:"#a78bfa",marginBottom:8}}>
+            If patient already has an nsec from billing, paste it here. Leave blank to generate new keys.
+          </div>
+          <textarea
+            value={form.existingNsec}
+            onChange={e=>set("existingNsec",e.target.value)}
+            placeholder="nsec1... (optional)"
+            rows={2}
+            style={{...S.input,resize:"none",fontFamily:"monospace",fontSize:11}}
+          />
         </div>
-        <div style={{fontSize:10,color:"#a78bfa",marginBottom:8}}>
-          If patient already has an nsec from billing, paste it here. Leave blank to generate new keys.
+      )}
+ 
+      {/* Store nsec checkbox (new mode only) */}
+      {mode==="new"&&(
+        <div style={{marginTop:12,display:"flex",alignItems:"center",gap:8}}>
+          <input
+            type="checkbox"
+            checked={form.storeNsec}
+            onChange={e=>setForm(f=>({...f,storeNsec:e.target.checked}))}
+            id="storeNsec"
+            style={{accentColor:"#f59e0b",width:16,height:16}}
+          />
+          <label htmlFor="storeNsec" style={{fontSize:11,color:"#94a3b8",cursor:"pointer"}}>
+            Store access code locally for recovery (less secure, more convenient)
+          </label>
         </div>
-        <textarea
-          value={form.existingNsec}
-          onChange={e=>set("existingNsec",e.target.value)}
-          placeholder="nsec1... (optional)"
-          rows={2}
-          style={{...S.input,resize:"none",fontFamily:"monospace",fontSize:11}}
-        />
-      </div>
-
+      )}
+ 
       <div style={{marginTop:10}}>
         <label style={S.lbl}>Street Address</label>
         <input value={form.address} onChange={e=>set("address",e.target.value)} style={S.input} placeholder="123 Main St"/>
@@ -1605,7 +1762,9 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         </div>
       </div>
       <div style={{display:"flex",gap:8,marginTop:16}}>
-        <Btn solid col="#0ea5e9" disabled={!canSubmit} onClick={handleCreate}>Add Patient</Btn>
+        <Btn solid col="#0ea5e9" disabled={!canSubmit} onClick={handleCreate}>
+          {mode==="new"?"Add Patient":"Add Existing Patient"}
+        </Btn>
         <Btn col="#475569" onClick={onCancel}>Cancel</Btn>
       </div>
     </div>
@@ -1843,10 +2002,37 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
         <div><label style={S.lbl}>ZIP</label>
           <input value={form.zip||""} onChange={e=>set("zip",e.target.value)} style={S.input}/></div>
       </div>
+      <div style={{marginTop:12}}>
+        <label style={S.lbl}>Billing Model</label>
+        <div style={{display:"flex",gap:8}}>
+          {([["monthly","Monthly Member"],["per-visit","Per-Visit"]] as const).map(([v,label])=>(
+            <button key={v} onClick={()=>setForm(f=>({...f,billingModel:v}))} style={{
+              flex:1,padding:"7px 12px",fontSize:12,fontWeight:600,borderRadius:6,
+              background:form.billingModel===v?"#164e63":"#0f172a",
+              color:form.billingModel===v?"#22d3ee":"#64748b",
+              border:`1px solid ${form.billingModel===v?"#22d3ee":"#334155"}`,
+              cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s",
+            }}>{label}</button>
+          ))}
+        </div>
+      </div>
       <div style={{display:"flex",gap:8,marginTop:14}}>
-        <Btn solid col="#0ea5e9" onClick={()=>{
+        <Btn solid col="#0ea5e9" onClick={async()=>{
           updatePatient(form); onUpdated(form); setEditing(false);
           publishPatientDemographics(form, keys, relay);
+          // If billing model changed, push to billing API
+          if(form.billingModel!==patient.billingModel && form.npub && BILLING_URL){
+            try{
+              await fetch(`${BILLING_URL}/api/patients/update`,{
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({
+                  patientId: form.id,
+                  patientType: form.billingModel,
+                  monthlyFee: form.billingModel==='per-visit'? 0 : undefined,
+                })
+              });
+            }catch(err){ console.error('Failed to sync billing model:',err); }
+          }
         }}>Save Changes</Btn>
         <Btn col="#475569" onClick={()=>{setForm({...patient});setEditing(false);}}>Cancel</Btn>
       </div>
@@ -2002,37 +2188,86 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
       {showAccess&&(
         <div style={{background:"#1a1a2e",border:"1px solid #334155",borderRadius:8,padding:12,marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:600,color:"#fbbf24",marginBottom:8}}>🔑 Portal Access</div>
-          <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
-            Patient access codes are shown once at creation and not stored in the chart. Use Re-key if the patient needs a new code.
-          </div>
-
-          {/* Show new nsec if re-key just happened */}
-          {rekeyNsec&&(
-            <div style={{background:"#052e16",border:"1px solid #166534",borderRadius:8,padding:12,marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:600,color:"#4ade80",marginBottom:6}}>🔑 New Access Code (copy now!)</div>
-              <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
-                {rekeyNsec}
+ 
+          {/* Self-keyed patient: show connection string, no re-key */}
+          {patient.keySource==="self"?(
+            <>
+              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+                This patient manages their own keys. Share the connection string so they can add your practice in their portal.
               </div>
-              <div style={{fontSize:10,color:"#f87171",fontStyle:"italic",marginBottom:8}}>
-                ⚠️ This will disappear when you leave this patient's chart.
+              <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:9,marginBottom:8,userSelect:"all" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
+                {JSON.stringify({practice_name:PRACTICE_NAME,relay:RELAY_URL,practice_pk:PRACTICE_PUBKEY,...(BILLING_URL?{billing_api:BILLING_URL}:{}),...(CALENDAR_URL?{calendar_api:CALENDAR_URL}:{})},null,2)}
               </div>
-              <Btn small col="#475569" onClick={()=>{
-                navigator.clipboard.writeText(rekeyNsec);
-                alert("New access code (nsec) copied to clipboard");
-              }}>📋 Copy new nsec</Btn>
-            </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,marginBottom:8}}>
+                <Btn small solid col="#7dd3fc" onClick={()=>{
+                  navigator.clipboard.writeText(JSON.stringify({practice_name:PRACTICE_NAME,relay:RELAY_URL,practice_pk:PRACTICE_PUBKEY,...(BILLING_URL?{billing_api:BILLING_URL}:{}),...(CALENDAR_URL?{calendar_api:CALENDAR_URL}:{})}));
+                  alert("Connection string copied to clipboard");
+                }}>📋 Copy Connection String</Btn>
+                <Btn small solid col="#0ea5e9" onClick={()=>{
+                  navigator.clipboard.writeText(patient.npub||"");
+                  alert(`Public key (npub) copied:\n${patient.npub}`);
+                }}>📋 Copy npub</Btn>
+              </div>
+            </>
+          ):(
+            <>
+              {/* Practice-keyed patient: nsec management + re-key */}
+              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+                {patient.nsecStored
+                  ? "Access code is stored locally. You can reveal it or clear it below."
+                  : "Access code was not stored. Use Re-key if the patient needs a new one."}
+              </div>
+ 
+              {/* Reveal stored nsec — admin/practice owner only */}
+              {patient.nsecStored && patient.nsec && canDo("admin") && (
+                <div style={{background:"#1e1040",border:"1px solid #7c3aed",borderRadius:8,padding:10,marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#c4b5fd",marginBottom:6}}>🔑 Stored Access Code</div>
+                  <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
+                    {patient.nsec}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <Btn small col="#7c3aed" onClick={()=>{
+                      navigator.clipboard.writeText(patient.nsec||"");
+                      alert("Access code (nsec) copied to clipboard");
+                    }}>📋 Copy nsec</Btn>
+                    <Btn small col="#f87171" onClick={()=>{
+                      if(!confirm("Remove stored access code? The patient can still use it — it just won't be recoverable from the EHR anymore.")) return;
+                      clearStoredNsec(patient.id);
+                      onUpdated({...patient, nsec:undefined, nsecStored:false});
+                    }}>🗑 Clear stored nsec</Btn>
+                  </div>
+                </div>
+              )}
+ 
+              {/* Show new nsec if re-key just happened */}
+              {rekeyNsec&&(
+                <div style={{background:"#052e16",border:"1px solid #166534",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#4ade80",marginBottom:6}}>🔑 New Access Code (copy now!)</div>
+                  <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
+                    {rekeyNsec}
+                  </div>
+                  <div style={{fontSize:10,color:"#f87171",fontStyle:"italic",marginBottom:8}}>
+                    ⚠️ This will disappear when you leave this patient's chart.
+                  </div>
+                  <Btn small col="#475569" onClick={()=>{
+                    navigator.clipboard.writeText(rekeyNsec);
+                    alert("New access code (nsec) copied to clipboard");
+                  }}>📋 Copy new nsec</Btn>
+                </div>
+              )}
+ 
+              <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,marginBottom:8}}>
+                <Btn small solid col="#0ea5e9" onClick={()=>{
+                  navigator.clipboard.writeText(patient.npub||"");
+                  alert(`Public key (npub) copied:\n${patient.npub}\n\nUse this for billing system.`);
+                }}>📋 Copy npub</Btn>
+                <Btn small col="#f59e0b" onClick={handleRekey} disabled={!canDo("admin")}>
+                  🔄 Re-key patient
+                </Btn>
+                {!canDo("admin")&&<span style={{fontSize:10,color:"#64748b"}}>Doctor only</span>}
+              </div>
+            </>
           )}
-
-          <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,marginBottom:8}}>
-            <Btn small solid col="#0ea5e9" onClick={()=>{
-              navigator.clipboard.writeText(patient.npub||"");
-              alert(`Public key (npub) copied:\n${patient.npub}\n\nUse this for billing system.`);
-            }}>📋 Copy npub</Btn>
-            <Btn small col="#f59e0b" onClick={handleRekey} disabled={!canDo("admin")}>
-              🔄 Re-key patient
-            </Btn>
-            {!canDo("admin")&&<span style={{fontSize:10,color:"#64748b"}}>Doctor only</span>}
-          </div>
         </div>
       )}
       
@@ -6768,6 +7003,8 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
   useEffect(()=>{
     if(initialTab) setTab(initialTab as ChartTab);
   },[initialTab,initialThreadId,inboxClickCount]);
+  // Reset to overview when switching patients
+  useEffect(()=>{ setTab("overview"); setShowDemographics(false); },[patient.id]);
   const [showActions,setShowActions]=useState(false);
   const [showNewEncounter,setShowNewEncounter]=useState(false);
   const [showNurseNote,setShowNurseNote]=useState(false);
@@ -6873,7 +7110,7 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
             </div>
           ) : (
             <>
-              <BillingStatusCard patient={patient}/>
+              {patient.billingModel!=="per-visit"&&<BillingStatusCard patient={patient}/>}
               <OverviewTiles patient={patient} keys={keys} relay={relay} onNavigate={t=>{
                 if(t==="demographics"){setShowDemographics(true);}
                 else setTab(t as ChartTab);
@@ -8537,7 +8774,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
   const slotsByTime:Record<string,any>={};
   daySlots.forEach(s=>{ if(!apptsByTime[s.start_time]) slotsByTime[s.start_time]=s; });
   const allTimes=[...new Set([...Object.keys(apptsByTime),...Object.keys(slotsByTime)])].sort();
-  const apptCount=monthAppts[selStr]?.length||0;
+  const apptCount=monthAppts[selStr]?.filter((a:any)=>a.status!=="cancelled"&&a.status!=="declined").length||0;
 
   const openNew=(date?:string,time?:string)=>{
     setEditingId(null);
@@ -8649,7 +8886,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
               const ds=`${calY}-${String(calM+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
               const isToday=ds===todayStr;
               const isSel=ds===selStr;
-              const hasAppts=!!(monthAppts[ds]?.length);
+              const hasAppts=!!(monthAppts[ds]?.filter((a:any)=>a.status!=="cancelled"&&a.status!=="declined").length);
               return(
                 <div key={d} onClick={()=>selectDate(new Date(calY,calM,d))}
                   style={{padding:"4px 2px",fontSize:12,lineHeight:1.8,borderRadius:6,cursor:"pointer",
@@ -9704,7 +9941,7 @@ function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,
             color:"#fff",fontWeight:700,fontSize:14,flexShrink:0}}>N</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>NostrEHR</div>
-            <div style={{color:"#4ade80",fontSize:9,textTransform:"uppercase",letterSpacing:"0.5px"}}>v1.0</div>
+            <div style={{color:"#4ade80",fontSize:9,textTransform:"uppercase",letterSpacing:"0.5px"}}>v1.1</div>
           </div>
         </div>
         {staffSession&&(
