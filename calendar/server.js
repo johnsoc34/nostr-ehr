@@ -34,7 +34,7 @@ const crypto = require("crypto");
 const CALENDAR_PASSWORD_HASH = process.env.CALENDAR_PASSWORD_HASH || crypto.createHash("sha256").update("changeme").digest("hex");
 
 function requireAuth(req, res, next) {
-  if (req.path.startsWith("/api/") || req.path === "/login" || req.path === "/logout" || req.session.authed) {
+  if (req.path.startsWith("/api/") || req.path === "/login" || req.path === "/logout" || req.path === "/request" || req.session.authed) {
     return next();
   }
   res.redirect("/login");
@@ -363,6 +363,16 @@ app.post("/api/reminders/send", async (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 
+// Serve the public intake form (no auth — exempted in requireAuth)
+app.get("/request", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "intake-request.html"));
+});
+
+// States endpoint for the intake form
+app.get("/api/intake/states", (req, res) => {
+  res.json({ states: LICENSED_STATES });
+});
+
 // ─── Virtual Visit Intake (Phase 5) ──────────────────────────────────────────
 
 // Public endpoint — no auth required
@@ -420,22 +430,24 @@ app.post("/api/intake/:id/approve", (req, res) => {
     const intake = db.getIntakeById(req.params.id);
     if (!intake) return res.status(404).json({ error: "Not found" });
     if (intake.status !== "pending") return res.status(400).json({ error: "Already processed" });
-    const { date, start_time, end_time, appt_type } = req.body;
-    if (!date || !start_time || !end_time)
-      return res.status(400).json({ error: "date, start_time, end_time required" });
-    const apptResult = db.createAppointment({
-      patient_npub: intake.npub || "pending-intake-" + intake.id,
-      patient_name: intake.name,
-      patient_phone: intake.phone || null,
-      date, start_time, end_time,
-      appt_type: appt_type || "video",
-      status: "confirmed",
-      notes: intake.chief_complaint ? "Chief complaint: " + intake.chief_complaint : null,
-      video_url: null, is_auto_booked: 0, visit_color: null, schedule_comment: null,
-    });
-    db.updateIntakeStatus(intake.id, "approved", { appointment_id: apptResult.lastInsertRowid });
-    console.log("[intake] Approved #" + intake.id + " (" + intake.name + ") -> appointment #" + apptResult.lastInsertRowid);
-    res.json({ intake_id: intake.id, appointment_id: apptResult.lastInsertRowid, status: "approved" });
+    const { date, start_time, end_time, appt_type } = req.body || {};
+    let appointment_id = null;
+    if (date && start_time && end_time) {
+      const apptResult = db.createAppointment({
+        patient_npub: intake.npub || "pending-intake-" + intake.id,
+        patient_name: intake.name,
+        patient_phone: intake.phone || null,
+        date, start_time, end_time,
+        appt_type: appt_type || "video",
+        status: "confirmed",
+        notes: intake.chief_complaint ? "Chief complaint: " + intake.chief_complaint : null,
+        video_url: null, is_auto_booked: 0, visit_color: null, schedule_comment: null,
+      });
+      appointment_id = apptResult.lastInsertRowid;
+    }
+    db.updateIntakeStatus(intake.id, "approved", { appointment_id });
+    console.log("[intake] Approved #" + intake.id + " (" + intake.name + ")" + (appointment_id ? " -> appt #" + appointment_id : " (no appt yet)"));
+    res.json({ intake_id: intake.id, appointment_id, status: "approved" });
   } catch (e) {
     console.error("[intake] Approve error:", e.message);
     res.status(500).json({ error: e.message });

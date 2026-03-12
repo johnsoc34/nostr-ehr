@@ -1523,7 +1523,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         try{
           await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
             method:'POST', headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({npub:patient.npub})
+            body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel})
           });
         }catch(err){ console.error('Failed to sync to billing:',err); }
       }
@@ -8656,8 +8656,8 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
 
 // ─── Calendar/Schedule View ──────────────────────────────────────────────────
 const CAL_MONTHS_FULL=["January","February","March","April","May","June","July","August","September","October","November","December"];
-const CAL_DAYS_SHORT=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-const CAL_DAYS_FULL=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const CAL_DAYS_SHORT=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const CAL_DAYS_FULL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,patientName:string,patientPkHex:string)=>void;onOpenChart?:(patientNpub:string)=>void}){
   const [mounted,setMounted]=useState(false);
@@ -8677,6 +8677,11 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
   const [openDays,setOpenDays]=useState<Set<number>>(new Set());
   const [savingAvail,setSavingAvail]=useState(false);
   const [patients,setPatients]=useState<Patient[]>([]);
+
+  const [intakeRequests,setIntakeRequests]=useState<any[]>([]);
+  const [intakeLoading,setIntakeLoading]=useState(false);
+  const [intakeDetail,setIntakeDetail]=useState<any|null>(null);
+  const [declineReason,setDeclineReason]=useState("");
 
   // Modal state
   const [apptModal,setApptModal]=useState(false);
@@ -8752,7 +8757,28 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
 
   useEffect(()=>{ loadMonth(calMonth); },[calMonth,loadMonth]);
   useEffect(()=>{ loadDay(selectedDate); },[selectedDate,loadDay]);
-  useEffect(()=>{ loadPending(); },[loadPending]);
+  const loadIntake=useCallback(async()=>{
+    if(!CAL_API)return;
+    try{
+      const res=await fetch(`${CAL_API}/api/intake/pending`);
+      const data=await res.json();
+      setIntakeRequests(Array.isArray(data)?data:[]);
+    }catch{ setIntakeRequests([]); }
+  },[]);
+  useEffect(()=>{ loadPending(); loadIntake(); },[loadPending,loadIntake]);
+  const approveIntake=async(id:number)=>{
+    try{
+      await fetch(`${CAL_API}/api/intake/${id}/approve`,{method:"POST",headers:{"Content-Type":"application/json"}});
+      await loadIntake();
+    }catch(e){ console.error("approve intake failed",e); }
+  };
+  const declineIntake=async(id:number,reason?:string)=>{
+    try{
+      await fetch(`${CAL_API}/api/intake/${id}/decline`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason:reason||null})});
+      setIntakeDetail(null); setDeclineReason("");
+      await loadIntake();
+    }catch(e){ console.error("decline intake failed",e); }
+  };
 
   const selectDate=(d:Date)=>{ setSelectedDate(d); setView("schedule"); };
   const changeMonth=(dir:number)=>setCalMonth(c=>new Date(c.getFullYear(),c.getMonth()+dir,1));
@@ -8762,13 +8788,13 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
   // Mini calendar grid
   const calY=calMonth.getFullYear(), calM=calMonth.getMonth();
   const daysInMonth=new Date(calY,calM+1,0).getDate();
-  const firstDow=(new Date(calY,calM,1).getDay()+6)%7; // Mon=0
+  const firstDow=new Date(calY,calM,1).getDay(); // Sun=0
   const daysInPrev=new Date(calY,calM,0).getDate();
   const selStr=calDateStr(selectedDate);
 
   // Day schedule time blocks
-  const dow=(selectedDate.getDay()+6)%7;
-  const isWeekend=dow>=5;
+  const dow=selectedDate.getDay();
+  const isWeekend=dow===0||dow===6;
   const apptsByTime:Record<string,any>={};
   dayAppts.filter(a=>a.status!=="cancelled"&&a.status!=="declined").forEach(a=>{ apptsByTime[a.start_time]=a; });
   const slotsByTime:Record<string,any>={};
@@ -8906,6 +8932,34 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
             ))}
           </div>
         </div>
+
+        {/* Intake Requests */}
+        {intakeRequests.length>0&&(
+          <div style={{padding:"14px 16px",borderBottom:`1px solid ${CS.border}`}}>
+            <div style={{fontSize:11,color:CS.accent,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+              <span style={{width:7,height:7,borderRadius:"50%",background:CS.accent,boxShadow:`0 0 6px ${CS.accent}`}}/>
+              Virtual Requests ({intakeRequests.length})
+            </div>
+            {intakeRequests.map((r:any)=>(
+              <div key={r.id}
+                style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderLeft:`3px solid ${CS.accent}`,borderRadius:8,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}
+                onClick={()=>setIntakeDetail(r)}
+              >
+                <div style={{fontWeight:600,fontSize:12,marginBottom:2}}>{r.name}</div>
+                <div style={{color:CS.muted,fontSize:11,lineHeight:1.4}}>
+                  {r.state}{r.date_of_birth?` · DOB ${r.date_of_birth}`:""}{r.preferred_date?` · Pref ${r.preferred_date}`:""}
+                </div>
+                <div style={{color:CS.muted,fontSize:11,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:190}}>
+                  {r.chief_complaint}
+                </div>
+                <div style={{display:"flex",gap:6,marginTop:8}}>
+                  <button onClick={e=>{e.stopPropagation();approveIntake(r.id);}} style={{background:"#22c55e20",border:`1px solid ${CS.green}`,color:CS.green,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Approve</button>
+                  <button onClick={e=>{e.stopPropagation();setIntakeDetail(r);}} style={{background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Decline</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Pending Approvals */}
         <div style={{padding:"14px 16px",flex:1}}>
@@ -9079,7 +9133,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
         <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
           <h2 style={{fontSize:16,fontWeight:800,marginBottom:4}}>Manage Availability</h2>
           <p style={{color:CS.muted,fontSize:12,marginBottom:20}}>Toggle time slots to open or close them for patient self-booking. Changes apply every week.</p>
-          {CAL_DAYS_FULL.slice(0,5).map((day,idx)=>{
+          {CAL_DAYS_FULL.slice(1,6).map((day,idx)=>{
             const dayTemplates=templates.filter(t=>t.day_of_week===idx);
             const activeSlots=new Set(dayTemplates.map(t=>t.start_time));
             const changes=pendingChanges[idx]||{};
@@ -9245,6 +9299,69 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
               <button onClick={()=>openEdit(detailModal.id)} style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,color:CS.text,borderRadius:7,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✏ Edit</button>
               <button onClick={()=>setDetailModal(null)} style={{background:"none",border:`1px solid transparent`,color:CS.muted,borderRadius:7,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Intake Detail / Decline Modal */}
+      {intakeDetail&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>{setIntakeDetail(null);setDeclineReason("");}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:14,padding:28,width:480,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+              <h3 style={{fontSize:16,fontWeight:800}}>Virtual Consultation Request</h3>
+              <button onClick={()=>{setIntakeDetail(null);setDeclineReason("");}} style={{background:"none",border:"none",color:CS.muted,cursor:"pointer",fontSize:18,padding:4}}>✕</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Name</div>
+                <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.name}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>State</div>
+                <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.state}</div>
+              </div>
+              {intakeDetail.phone&&<div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Phone</div>
+                <div style={{fontSize:14}}>{intakeDetail.phone}</div>
+              </div>}
+              {intakeDetail.email&&<div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Email</div>
+                <div style={{fontSize:14}}>{intakeDetail.email}</div>
+              </div>}
+              {intakeDetail.date_of_birth&&<div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Child DOB</div>
+                <div style={{fontSize:14}}>{intakeDetail.date_of_birth}</div>
+              </div>}
+              {intakeDetail.preferred_date&&<div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Preferred Date</div>
+                <div style={{fontSize:14}}>{intakeDetail.preferred_date}{intakeDetail.preferred_time?` (${intakeDetail.preferred_time})`:""}</div>
+              </div>}
+              {intakeDetail.npub&&<div style={{gridColumn:"1/-1"}}>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Nostr npub</div>
+                <div style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",wordBreak:"break-all"}}>{intakeDetail.npub}</div>
+              </div>}
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Chief Complaint</div>
+              <div style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderRadius:8,padding:"12px 14px",fontSize:13,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
+                {intakeDetail.chief_complaint}
+              </div>
+            </div>
+            <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Decline Reason (optional)</div>
+            <textarea value={declineReason} onChange={e=>setDeclineReason(e.target.value)} placeholder="e.g. Outside scope, needs in-person eval..."
+              style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${CS.border}`,background:CS.surfaceHi,color:CS.text,fontSize:13,fontFamily:"inherit",resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box",marginBottom:16}}/>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>{declineIntake(intakeDetail.id,declineReason);}}
+                style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:600,background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,cursor:"pointer",fontFamily:"inherit"}}>
+                Decline Request
+              </button>
+              <button onClick={()=>{approveIntake(intakeDetail.id);setIntakeDetail(null);}}
+                style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:700,background:CS.accent,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+                Approve →
+              </button>
+            </div>
+            <p style={{fontSize:11,color:CS.muted,marginTop:12,lineHeight:1.5}}>
+              Approving marks this request as accepted and creates a pending appointment. {intakeDetail.npub?"This patient provided an npub — use Import by npub to create their record.":"You'll need to create a patient record and keypair in the Patients tab."}
+            </p>
           </div>
         </div>
       )}

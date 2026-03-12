@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Request a Virtual Consultation — Immutable Health Pediatrics</title>
+  <meta name="description" content="Request a virtual pediatric consultation. Bitcoin-native, Nostr-encrypted, available statewide." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0d12; --surface: #111620; --surfaceHi: #1a2233;
+      --border: #1e2d44; --text: #e8edf5; --textMuted: #6b7fa3;
+      --accent: #f7931a; --accentLt: #fbb040;
+      --green: #22c55e; --red: #ef4444; --amber: #f59e0b;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      font-size: 15px; line-height: 1.6;
+      min-height: 100vh;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accentLt); }
+
+    /* ── Layout ── */
+    .wrapper { max-width: 620px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    /* ── Header ── */
+    .logo-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 40px;
+    }
+    .logo-mark {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accentLt));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; font-weight: 800; color: #fff;
+      box-shadow: 0 2px 12px rgba(247,147,26,0.3);
+      flex-shrink: 0;
+    }
+    .logo-text { font-size: 15px; font-weight: 700; }
+    .logo-text span { color: var(--textMuted); font-weight: 500; }
+
+    .page-title {
+      font-size: clamp(24px, 4vw, 32px); font-weight: 800;
+      letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 12px;
+    }
+    .page-sub {
+      font-size: 15px; color: var(--textMuted); line-height: 1.65; margin-bottom: 36px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px; margin-bottom: 24px;
+    }
+    .card h3 { font-size: 14px; font-weight: 700; margin-bottom: 18px; }
+
+    /* ── Form ── */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .form-row .form-field { margin-bottom: 0; }
+    .form-field label {
+      font-size: 11px; font-weight: 600; color: var(--textMuted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .form-field .req { color: var(--red); }
+    .form-field input,
+    .form-field textarea,
+    .form-field select {
+      padding: 10px 14px; border-radius: 9px;
+      border: 1px solid var(--border); background: var(--surfaceHi);
+      color: var(--text); font-size: 14px; font-family: inherit;
+      outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+      resize: vertical;
+    }
+    .form-field input:focus,
+    .form-field textarea:focus,
+    .form-field select:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(247,147,26,0.13);
+    }
+    .form-field select option { background: var(--surface); }
+    .form-field input::placeholder,
+    .form-field textarea::placeholder { color: #3d5070; }
+    .form-hint { font-size: 11px; color: var(--textMuted); margin-top: 2px; }
+
+    /* ── Buttons ── */
+    .btn-submit {
+      display: block; width: 100%; padding: 13px; border-radius: 10px;
+      background: var(--accent); color: #fff; border: none;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: all 0.15s;
+      box-shadow: 0 4px 20px rgba(247,147,26,0.3);
+    }
+    .btn-submit:hover { background: var(--accentLt); transform: translateY(-1px); }
+    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ── State error ── */
+    .state-error {
+      display: none; padding: 14px 16px; border-radius: 10px;
+      background: #ef444415; border: 1px solid #ef444440;
+      color: var(--red); font-size: 13px; font-weight: 500;
+      margin-bottom: 14px; line-height: 1.5;
+    }
+    .state-error.show { display: block; }
+
+    /* ── Success ── */
+    .success-card {
+      display: none; text-align: center; padding: 48px 28px;
+    }
+    .success-card.show { display: block; }
+    .success-card .icon { font-size: 48px; margin-bottom: 16px; }
+    .success-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.02em; }
+    .success-card p { color: var(--textMuted); line-height: 1.65; }
+
+    /* ── Info cards ── */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+    .info-item {
+      background: var(--surfaceHi); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .info-item .icon { font-size: 18px; margin-bottom: 6px; }
+    .info-item h4 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+    .info-item p { font-size: 12px; color: var(--textMuted); line-height: 1.5; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center; padding-top: 32px; border-top: 1px solid var(--border);
+      margin-top: 24px;
+    }
+    .footer p { font-size: 12px; color: var(--textMuted); }
+
+    /* ── Responsive ── */
+    @media (max-width: 580px) {
+      .form-row { grid-template-columns: 1fr; }
+      .info-grid { grid-template-columns: 1fr; }
+      .wrapper { padding: 32px 18px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+  <!-- Logo -->
+  <a href="https://immutablehealthpediatrics.com" class="logo-bar">
+    <div class="logo-mark">Ⅰ</div>
+    <div class="logo-text">Immutable Health <span>Pediatrics</span></div>
+  </a>
+
+  <h1 class="page-title">Request a Virtual Consultation</h1>
+  <p class="page-sub">
+    Submit a request and we'll get back to you within 24 hours to confirm your appointment.
+    All virtual visits are conducted via encrypted video on our patient portal.
+  </p>
+
+  <!-- Info cards -->
+  <div class="info-grid">
+    <div class="info-item">
+      <div class="icon">🩺</div>
+      <h4>Pediatric Care</h4>
+      <p>Ages 0–18. Sick visits, follow-ups, second opinions, and more.</p>
+    </div>
+    <div class="info-item">
+      <div class="icon">📱</div>
+      <h4>Encrypted Video</h4>
+      <p>End-to-end encrypted telehealth. Your data stays yours.</p>
+    </div>
+    <div class="info-item">
+      <div class="icon">₿</div>
+      <h4>Bitcoin Accepted</h4>
+      <p>Pay via Lightning, on-chain, or traditional card/ACH.</p>
+    </div>
+    <div class="info-item">
+      <div class="icon">⚡</div>
+      <h4>Quick Turnaround</h4>
+      <p>Most requests confirmed within 24 hours.</p>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div class="card" id="formCard">
+    <h3>Your Information</h3>
+    <form id="intakeForm" onsubmit="submitForm(event)">
+
+      <div class="form-row">
+        <div class="form-field">
+          <label>Parent / Guardian Name <span class="req">*</span></label>
+          <input type="text" id="name" required placeholder="Jane Smith" />
+        </div>
+        <div class="form-field">
+          <label>Phone <span class="req">*</span></label>
+          <input type="tel" id="phone" required placeholder="(555) 123-4567" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label>Email</label>
+          <input type="email" id="email" placeholder="you@example.com" />
+        </div>
+        <div class="form-field">
+          <label>Child's Date of Birth <span class="req">*</span></label>
+          <input type="date" id="dob" required />
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>State of Residence <span class="req">*</span></label>
+        <select id="state" required onchange="checkState()">
+          <option value="">Select your state...</option>
+        </select>
+        <div class="form-hint">We can only see patients in states where we are licensed.</div>
+      </div>
+
+      <div class="state-error" id="stateError">
+        We're sorry — we are not currently licensed to practice in your state.
+        We can only provide virtual consultations to patients located in states where we hold an active medical license.
+      </div>
+
+      <div class="form-field">
+        <label>What brings you in? <span class="req">*</span></label>
+        <textarea id="complaint" required rows="4" placeholder="Describe your child's symptoms or reason for visit..."></textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label>Preferred Date</label>
+          <input type="date" id="prefDate" />
+        </div>
+        <div class="form-field">
+          <label>Preferred Time</label>
+          <select id="prefTime">
+            <option value="">No preference</option>
+            <option value="morning">Morning (9am–12pm)</option>
+            <option value="afternoon">Afternoon (12pm–4pm)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>Nostr npub <span style="color:var(--textMuted);font-weight:400;text-transform:none;letter-spacing:0">(optional — if you already have a Nostr health identity)</span></label>
+        <input type="text" id="npub" placeholder="npub1..." style="font-family:'IBM Plex Mono',monospace;font-size:13px" />
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn">Submit Request →</button>
+    </form>
+  </div>
+
+  <!-- Success card (hidden until submission) -->
+  <div class="card success-card" id="successCard">
+    <div class="icon">✅</div>
+    <h2>Request Submitted</h2>
+    <p>
+      Thank you! We've received your consultation request.
+      We'll review it and get back to you within 24 hours to confirm your appointment
+      and send you portal access instructions.
+    </p>
+    <p style="margin-top:16px">
+      <a href="https://immutablehealthpediatrics.com">← Back to Immutable Health Pediatrics</a>
+    </p>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>© 2026 Immutable Health Pediatrics · <a href="https://immutablehealthpediatrics.com">immutablehealthpediatrics.com</a></p>
+  </div>
+</div>
+
+<script>
+  // ── Licensed states — loaded from server, fallback hardcoded ──
+  let LICENSED_STATES = [];
+
+  const ALL_STATES = [
+    "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
+    "Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa",
+    "Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan",
+    "Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire",
+    "New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio",
+    "Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota",
+    "Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia",
+    "Wisconsin","Wyoming","District of Columbia"
+  ];
+
+  // State abbreviations for matching
+  const STATE_ABBREVS = {
+    "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+    "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+    "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS",
+    "Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA",
+    "Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT",
+    "Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM",
+    "New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK",
+    "Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC",
+    "South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT",
+    "Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY",
+    "District of Columbia":"DC"
+  };
+
+  // Populate state dropdown
+  const sel = document.getElementById("state");
+  ALL_STATES.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = STATE_ABBREVS[s];
+    opt.textContent = s;
+    sel.appendChild(opt);
+  });
+
+  // Load licensed states from server
+  fetch("/api/intake/states").then(r => r.json()).then(data => {
+    if (Array.isArray(data.states)) LICENSED_STATES = data.states;
+  }).catch(() => {});
+
+  function checkState() {
+    const val = document.getElementById("state").value;
+    const err = document.getElementById("stateError");
+    const btn = document.getElementById("submitBtn");
+    if (val && LICENSED_STATES.length > 0 && !LICENSED_STATES.includes(val)) {
+      err.classList.add("show");
+      btn.disabled = true;
+    } else {
+      err.classList.remove("show");
+      btn.disabled = false;
+    }
+  }
+
+  async function submitForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById("submitBtn");
+    btn.disabled = true;
+    btn.textContent = "Submitting...";
+
+    const body = {
+      name: document.getElementById("name").value.trim(),
+      email: document.getElementById("email").value.trim() || null,
+      phone: document.getElementById("phone").value.trim() || null,
+      date_of_birth: document.getElementById("dob").value || null,
+      state: document.getElementById("state").value,
+      chief_complaint: document.getElementById("complaint").value.trim(),
+      preferred_date: document.getElementById("prefDate").value || null,
+      preferred_time: document.getElementById("prefTime").value || null,
+      npub: document.getElementById("npub").value.trim() || null,
+    };
+
+    try {
+      const res = await fetch("/api/intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        document.getElementById("formCard").style.display = "none";
+        document.getElementById("successCard").classList.add("show");
+      } else {
+        const err = await res.json().catch(() => ({ error: "Submission failed" }));
+        alert(err.error || "Something went wrong. Please try again.");
+        btn.disabled = false;
+        btn.textContent = "Submit Request →";
+      }
+    } catch (err) {
+      alert("Network error — please check your connection and try again.");
+      btn.disabled = false;
+      btn.textContent = "Submit Request →";
+    }
+  }
+
+  // Set min date for preferred date to tomorrow
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  document.getElementById("prefDate").min = tomorrow.toISOString().split("T")[0];
+</script>
+</body>
+</html>
