@@ -182,6 +182,48 @@ async function publishPatientGrantForFhirAgent(
   }catch(e){console.error("[Grant] Failed to publish FHIR agent grant:",e);}
 }
 
+// Publish a kind 2104 GuardianGrant — gives a guardian (parent) decryption access
+// to a child patient's records. The grant contains the child's X₂ shared secret
+// encrypted to the guardian's pubkey. The guardian can then decrypt patient-content
+// tags on the child's clinical events from the portal.
+async function publishGuardianGrant(
+  child: { id: string; name: string; npub?: string },
+  guardianPkHex: string,
+  keys: Keypair,
+  relay: ReturnType<typeof useRelay>,
+): Promise<boolean> {
+  if (!child.npub) return false;
+  try {
+    const childPkHex = npubToHex(child.npub);
+    const childSharedSecret = toHex(getSharedSecret(keys.sk, childPkHex));
+    const guardianSharedX = getSharedSecret(keys.sk, guardianPkHex);
+ 
+    const payload: import("../lib/nostr").GuardianGrantPayload = {
+      childPatientId: child.id,
+      childPkHex,
+      childSharedSecret,
+      childName: child.name,
+      guardianPkHex,
+    };
+ 
+    const encrypted = await nip44Encrypt(JSON.stringify(payload), guardianSharedX);
+    const tags = [
+      ["p", guardianPkHex],           // so portal can query: {kinds:[2104], #p:[guardianPk]}
+      ["pt", child.id],               // child patient ID
+      ["child-p", childPkHex],        // child pubkey for reference
+      ["grant", "guardian-access"],    // grant type marker
+    ];
+ 
+    const event = await buildAndSignEvent(STAFF_KINDS.GuardianGrant, encrypted, tags, keys.sk);
+    const ok = await relay.publish(event);
+    if (ok) console.log(`[Guardian] Published grant: guardian ${guardianPkHex.slice(0,8)}... → child ${child.name} (${child.id})`);
+    return ok;
+  } catch (e) {
+    console.error("[Guardian] Failed to publish grant:", e);
+    return false;
+  }
+}
+
 function npubToHex(npub: string): string {
   if (!npub || !npub.startsWith('npub')) throw new Error('Invalid npub');
   const data = npub.slice(5);
@@ -1488,12 +1530,12 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         // Auto-grant FHIR reader agent access
         publishPatientGrantForFhirAgent(patient, keys, relay);
  
-        // Sync to billing (only for monthly members)
-        if(patient.billingModel==="monthly" && patient.npub && BILLING_URL){
+        // Sync to billing (all patients need a record for relay whitelist)
+        if(patient.npub && BILLING_URL){
           try{
             await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
               method:'POST', headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel})
+              body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel,name:patient.name})
             });
           }catch(err){ console.error('Failed to sync to billing:',err); }
         }
@@ -1518,12 +1560,12 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
       // Auto-grant FHIR reader agent access
       publishPatientGrantForFhirAgent(patient, keys, relay);
  
-      // Sync to billing (only for monthly members)
-      if(patient.billingModel==="monthly" && patient.npub && BILLING_URL){
+      // Sync to billing (all patients need a record for relay whitelist)
+      if(patient.npub && BILLING_URL){
         try{
           await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
             method:'POST', headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel})
+            body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel,name:patient.name})
           });
         }catch(err){ console.error('Failed to sync to billing:',err); }
       }
@@ -2135,6 +2177,12 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
       // Re-grant FHIR reader agent access with new patient pubkey
       publishPatientGrantForFhirAgent(updated,keys,relay);
 
+      // Re-publish guardian grants for any guardians of this child (new X₂)
+      const guardians=loadPatients().filter(p=>p.guardianOf?.includes(patient.id));
+      for(const g of guardians){
+        if(g.npub) publishGuardianGrant(updated,npubToHex(g.npub),keys,relay);
+      }
+
       // Update billing record + trigger whitelist sync
       let billingStatus="";
       try{
@@ -2277,6 +2325,144 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
           <span style={{color:"#e2e8f0",fontSize:12,fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{v}</span>
         </div>
       ))}
+ 
+      {/* ── Guardian / Family Links ── */}
+      <GuardianSection patient={patient} onUpdated={onUpdated} keys={keys} relay={relay}/>
+    </div>
+  );
+}
+
+function GuardianSection({patient,onUpdated,keys,relay}:{patient:Patient;onUpdated:(p:Patient)=>void;keys:Keypair;relay:ReturnType<typeof useRelay>}){
+  const [expanded,setExpanded]=useState(false);
+  const [linking,setLinking]=useState(false);
+  const [selectedChildId,setSelectedChildId]=useState("");
+  const [publishing,setPublishing]=useState(false);
+  const allPatients=useMemo(()=>loadPatients(),[patient.id]);
+
+  const isGuardian=!!(patient.guardianOf&&patient.guardianOf.length>0);
+  const guardianChildren=isGuardian ? allPatients.filter(p=>patient.guardianOf!.includes(p.id)) : [];
+  const childGuardians=allPatients.filter(p=>p.guardianOf?.includes(patient.id));
+
+  const linkableChildren=allPatients.filter(p=>
+    p.id!==patient.id && p.npub && !(patient.guardianOf||[]).includes(p.id)
+  );
+
+  const handleLinkChild=async(childId:string)=>{
+    if(!patient.npub||!canDo("admin")) return;
+    const child=allPatients.find(p=>p.id===childId);
+    if(!child?.npub) return;
+    setPublishing(true);
+    try{
+      const guardianPkHex=npubToHex(patient.npub);
+      const all=loadPatients();
+      const guardian=all.find(p=>p.id===patient.id);
+      const childRec=all.find(p=>p.id===childId);
+      if(!guardian||!childRec) return;
+      const existing=guardian.guardianOf||[];
+      if(!existing.includes(childId)) guardian.guardianOf=[...existing,childId];
+      childRec.guardianNpub=patient.npub;
+      savePatients(all);
+      const ok=await publishGuardianGrant(child,guardianPkHex,keys,relay);
+      if(ok){
+        onUpdated({...patient,guardianOf:guardian.guardianOf});
+        setLinking(false);setSelectedChildId("");
+      } else alert("Failed to publish guardian grant to relay");
+    }catch(e){
+      console.error("[Guardian] Link failed:",e);
+      alert("Error linking guardian: "+(e instanceof Error?e.message:"unknown"));
+    }finally{ setPublishing(false); }
+  };
+
+  const handleUnlinkChild=async(childId:string)=>{
+    if(!canDo("admin")) return;
+    if(!confirm("Remove guardian access to this patient? The guardian will no longer see this child's records in the portal.")) return;
+    const all=loadPatients();
+    const guardian=all.find(p=>p.id===patient.id);
+    const childRec=all.find(p=>p.id===childId);
+    if(guardian&&guardian.guardianOf){
+      guardian.guardianOf=guardian.guardianOf.filter(id=>id!==childId);
+      if(guardian.guardianOf.length===0) delete guardian.guardianOf;
+    }
+    if(childRec) delete childRec.guardianNpub;
+    savePatients(all);
+    onUpdated({...patient,guardianOf:guardian?.guardianOf});
+  };
+
+  const republishGrants=async()=>{
+    if(!patient.npub||!patient.guardianOf?.length) return;
+    setPublishing(true);
+    const guardianPkHex=npubToHex(patient.npub);
+    let ok=0;
+    for(const childId of patient.guardianOf){
+      const child=allPatients.find(p=>p.id===childId);
+      if(child?.npub){ if(await publishGuardianGrant(child,guardianPkHex,keys,relay)) ok++; }
+    }
+    setPublishing(false);
+    if(ok>0) alert(`Republished ${ok} guardian grant(s)`);
+  };
+
+  if(!isGuardian&&childGuardians.length===0&&!canDo("admin")) return null;
+
+  return(
+    <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid #1e293b"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,cursor:"pointer"}}
+        onClick={()=>setExpanded(!expanded)}>
+        <div style={{fontWeight:600,fontSize:13,color:"#94a3b8",display:"flex",alignItems:"center",gap:6}}>
+          👨‍👩‍👧 Family Links
+          {isGuardian&&<span style={{fontSize:10,background:"#164e63",color:"#22d3ee",padding:"1px 6px",borderRadius:10,fontWeight:600}}>{guardianChildren.length} child{guardianChildren.length!==1?"ren":""}</span>}
+          {childGuardians.length>0&&<span style={{fontSize:10,background:"#1c1917",color:"#f59e0b",padding:"1px 6px",borderRadius:10,fontWeight:600}}>has guardian</span>}
+        </div>
+        <span style={{fontSize:12,color:"#475569"}}>{expanded?"▾":"▸"}</span>
+      </div>
+      {expanded&&(
+        <div style={{fontSize:12}}>
+          {isGuardian&&(
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:600,color:"#475569",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Guardian of</div>
+              {guardianChildren.map(child=>(
+                <div key={child.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#0f172a",borderRadius:6,marginBottom:4}}>
+                  <div>
+                    <span style={{fontWeight:600,color:"#e2e8f0"}}>{child.name}</span>
+                    {child.dob&&<span style={{color:"#64748b",marginLeft:8,fontSize:11}}>{ageFromDob(child.dob).display}</span>}
+                  </div>
+                  {canDo("admin")&&<button onClick={()=>handleUnlinkChild(child.id)} style={{fontSize:10,color:"#ef4444",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>✕</button>}
+                </div>
+              ))}
+              {canDo("admin")&&<button onClick={()=>republishGrants()} disabled={publishing} style={{fontSize:10,color:"#6b7fa3",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:4}}>{publishing?"Publishing...":"↻ Republish all guardian grants"}</button>}
+            </div>
+          )}
+          {childGuardians.length>0&&(
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:600,color:"#475569",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Guardian(s)</div>
+              {childGuardians.map(g=>(
+                <div key={g.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#0f172a",borderRadius:6,marginBottom:4}}>
+                  <span style={{fontWeight:600,color:"#e2e8f0"}}>{g.name}</span>
+                  <span style={{fontSize:10,color:"#22d3ee",fontFamily:"'IBM Plex Mono',monospace"}}>{g.npub?.substring(0,20)}...</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {canDo("admin")&&(
+            <div>
+              {!linking?(
+                <button onClick={()=>setLinking(true)} style={{fontSize:11,fontWeight:600,color:"#f7931a",background:"#f7931a10",border:"1px solid #f7931a40",borderRadius:6,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit"}}>+ Link child patient</button>
+              ):(
+                <div style={{background:"#0f172a",border:"1px solid #1e3a5f",borderRadius:8,padding:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#94a3b8",marginBottom:6}}>Select a patient to link as child:</div>
+                  <select value={selectedChildId} onChange={e=>setSelectedChildId(e.target.value)} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12,fontFamily:"inherit",marginBottom:8,cursor:"pointer"}}>
+                    <option value="">Choose patient...</option>
+                    {linkableChildren.map(p=><option key={p.id} value={p.id}>{p.name}{p.dob?` (${ageFromDob(p.dob).display})`:""}</option>)}
+                  </select>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>{if(selectedChildId)handleLinkChild(selectedChildId);}} disabled={!selectedChildId||publishing} style={{flex:1,padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:700,background:selectedChildId?"#f7931a":"#334155",color:selectedChildId?"#fff":"#64748b",border:"none",cursor:selectedChildId?"pointer":"default",fontFamily:"inherit",opacity:publishing?0.5:1}}>{publishing?"Publishing grant...":"Link & Publish Grant"}</button>
+                    <button onClick={()=>{setLinking(false);setSelectedChildId("");}} style={{padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:500,background:"transparent",color:"#64748b",border:"1px solid #334155",cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -8760,7 +8946,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
   const loadIntake=useCallback(async()=>{
     if(!CAL_API)return;
     try{
-      const res=await fetch(`${CAL_API}/api/intake/pending`);
+      const res=await fetch(`${CAL_API}/api/intake/active`);
       const data=await res.json();
       setIntakeRequests(Array.isArray(data)?data:[]);
     }catch{ setIntakeRequests([]); }
@@ -8768,7 +8954,9 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
   useEffect(()=>{ loadPending(); loadIntake(); },[loadPending,loadIntake]);
   const approveIntake=async(id:number)=>{
     try{
-      await fetch(`${CAL_API}/api/intake/${id}/approve`,{method:"POST",headers:{"Content-Type":"application/json"}});
+      const res=await fetch(`${CAL_API}/api/intake/${id}/approve`,{method:"POST",headers:{"Content-Type":"application/json"}});
+      const data=await res.json();
+      if(data.onboard_url){ try{await navigator.clipboard.writeText(data.onboard_url);}catch{} }
       await loadIntake();
     }catch(e){ console.error("approve intake failed",e); }
   };
@@ -8940,24 +9128,38 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
               <span style={{width:7,height:7,borderRadius:"50%",background:CS.accent,boxShadow:`0 0 6px ${CS.accent}`}}/>
               Virtual Requests ({intakeRequests.length})
             </div>
-            {intakeRequests.map((r:any)=>(
+            {intakeRequests.map((r:any)=>{
+              const stColor=r.status==="pending"?CS.accent:r.status==="approved"?CS.amber:r.status==="ready"?CS.green:CS.muted;
+              return(
               <div key={r.id}
-                style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderLeft:`3px solid ${CS.accent}`,borderRadius:8,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}
+                style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderLeft:`3px solid ${stColor}`,borderRadius:8,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}
                 onClick={()=>setIntakeDetail(r)}
               >
-                <div style={{fontWeight:600,fontSize:12,marginBottom:2}}>{r.name}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+                  <div style={{fontWeight:600,fontSize:12}}>{r.name}</div>
+                  <span style={{fontSize:9,fontWeight:700,color:stColor,background:`${stColor}15`,padding:"2px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{r.status}</span>
+                </div>
                 <div style={{color:CS.muted,fontSize:11,lineHeight:1.4}}>
                   {r.state}{r.date_of_birth?` · DOB ${r.date_of_birth}`:""}{r.preferred_date?` · Pref ${r.preferred_date}`:""}
                 </div>
-                <div style={{color:CS.muted,fontSize:11,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:190}}>
+                {r.chief_complaint&&<div style={{color:CS.muted,fontSize:11,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:190}}>
                   {r.chief_complaint}
-                </div>
-                <div style={{display:"flex",gap:6,marginTop:8}}>
-                  <button onClick={e=>{e.stopPropagation();approveIntake(r.id);}} style={{background:"#22c55e20",border:`1px solid ${CS.green}`,color:CS.green,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Approve</button>
-                  <button onClick={e=>{e.stopPropagation();setIntakeDetail(r);}} style={{background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Decline</button>
-                </div>
+                </div>}
+                {r.status==="pending"&&(
+                  <div style={{display:"flex",gap:6,marginTop:8}}>
+                    <button onClick={e=>{e.stopPropagation();approveIntake(r.id);}} style={{background:"#22c55e20",border:`1px solid ${CS.green}`,color:CS.green,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Approve</button>
+                    <button onClick={e=>{e.stopPropagation();setIntakeDetail(r);}} style={{background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Decline</button>
+                  </div>
+                )}
+                {r.status==="approved"&&(
+                  <div style={{fontSize:11,color:CS.amber,marginTop:6}}>⏳ Awaiting onboarding</div>
+                )}
+                {r.status==="ready"&&(
+                  <div style={{fontSize:11,color:CS.green,marginTop:6}}>✓ Ready — click to create patient</div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -9305,14 +9507,19 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
       {/* Intake Detail / Decline Modal */}
       {intakeDetail&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>{setIntakeDetail(null);setDeclineReason("");}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:14,padding:28,width:480,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:14,padding:28,width:520,maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
               <h3 style={{fontSize:16,fontWeight:800}}>Virtual Consultation Request</h3>
-              <button onClick={()=>{setIntakeDetail(null);setDeclineReason("");}} style={{background:"none",border:"none",color:CS.muted,cursor:"pointer",fontSize:18,padding:4}}>✕</button>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:10,fontWeight:700,color:intakeDetail.status==="pending"?CS.accent:intakeDetail.status==="approved"?CS.amber:intakeDetail.status==="ready"?CS.green:CS.muted,
+                  background:`${(intakeDetail.status==="pending"?CS.accent:intakeDetail.status==="approved"?CS.amber:intakeDetail.status==="ready"?CS.green:CS.muted)}15`,
+                  padding:"3px 10px",borderRadius:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{intakeDetail.status}</span>
+                <button onClick={()=>{setIntakeDetail(null);setDeclineReason("");}} style={{background:"none",border:"none",color:CS.muted,cursor:"pointer",fontSize:18,padding:4}}>✕</button>
+              </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
               <div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Name</div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Parent/Guardian</div>
                 <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.name}</div>
               </div>
               <div>
@@ -9336,7 +9543,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
                 <div style={{fontSize:14}}>{intakeDetail.preferred_date}{intakeDetail.preferred_time?` (${intakeDetail.preferred_time})`:""}</div>
               </div>}
               {intakeDetail.npub&&<div style={{gridColumn:"1/-1"}}>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Nostr npub</div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Guardian npub</div>
                 <div style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",wordBreak:"break-all"}}>{intakeDetail.npub}</div>
               </div>}
             </div>
@@ -9346,22 +9553,103 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
                 {intakeDetail.chief_complaint}
               </div>
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Decline Reason (optional)</div>
-            <textarea value={declineReason} onChange={e=>setDeclineReason(e.target.value)} placeholder="e.g. Outside scope, needs in-person eval..."
-              style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${CS.border}`,background:CS.surfaceHi,color:CS.text,fontSize:13,fontFamily:"inherit",resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box",marginBottom:16}}/>
-            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-              <button onClick={()=>{declineIntake(intakeDetail.id,declineReason);}}
-                style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:600,background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,cursor:"pointer",fontFamily:"inherit"}}>
-                Decline Request
-              </button>
-              <button onClick={()=>{approveIntake(intakeDetail.id);setIntakeDetail(null);}}
-                style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:700,background:CS.accent,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
-                Approve →
-              </button>
-            </div>
-            <p style={{fontSize:11,color:CS.muted,marginTop:12,lineHeight:1.5}}>
-              Approving marks this request as accepted and creates a pending appointment. {intakeDetail.npub?"This patient provided an npub — use Import by npub to create their record.":"You'll need to create a patient record and keypair in the Patients tab."}
-            </p>
+
+            {/* ── Status-dependent actions ── */}
+            {intakeDetail.status==="pending"&&<>
+              <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Decline Reason (optional)</div>
+              <textarea value={declineReason} onChange={e=>setDeclineReason(e.target.value)} placeholder="e.g. Outside scope, needs in-person eval..."
+                style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${CS.border}`,background:CS.surfaceHi,color:CS.text,fontSize:13,fontFamily:"inherit",resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box",marginBottom:16}}/>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+                <button onClick={()=>{declineIntake(intakeDetail.id,declineReason);}}
+                  style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:600,background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,cursor:"pointer",fontFamily:"inherit"}}>Decline</button>
+                <button onClick={()=>{approveIntake(intakeDetail.id);setIntakeDetail(null);}}
+                  style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:700,background:CS.accent,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>Approve & Send Onboarding Link →</button>
+              </div>
+              <p style={{fontSize:11,color:CS.muted,marginTop:12,lineHeight:1.5}}>
+                Approving sends an onboarding link via {intakeDetail.contact_preference==="text"?"text":"email"}. The parent will generate their access code and connect to the portal.
+              </p>
+            </>}
+
+            {intakeDetail.status==="approved"&&<>
+              <div style={{background:"#78350f20",border:`1px solid ${CS.amber}40`,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:600,color:CS.amber,marginBottom:4}}>⏳ Awaiting Patient Onboarding</div>
+                <div style={{fontSize:12,color:"#fde68a",lineHeight:1.5}}>Onboarding link was sent. Waiting for the parent to generate their access code.</div>
+                <div style={{marginTop:8,fontSize:11}}>
+                  <span style={{color:CS.muted}}>Onboard link: </span>
+                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#94a3b8",wordBreak:"break-all" as const}}>{CAL_API}/onboard/{intakeDetail.id}</span>
+                  <button onClick={()=>{navigator.clipboard.writeText(`${CAL_API}/onboard/${intakeDetail.id}`);}} style={{marginLeft:8,fontSize:10,color:CS.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>Copy</button>
+                </div>
+              </div>
+            </>}
+
+            {intakeDetail.status==="ready"&&<>
+              <div style={{background:"#05291a",border:`1px solid ${CS.green}40`,borderRadius:8,padding:"14px 16px",marginBottom:16}}>
+                <div style={{fontSize:12,fontWeight:600,color:CS.green,marginBottom:6}}>✓ Parent Connected</div>
+                <div style={{fontSize:12,color:"#bbf7d0",lineHeight:1.5,marginBottom:10}}>
+                  The parent has generated their access code and submitted their npub. Click below to create the child's patient record, link the parent as guardian, and publish all grants — in one step.
+                </div>
+                {intakeDetail.npub&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#94a3b8",wordBreak:"break-all" as const,marginBottom:8}}>
+                  Guardian npub: {intakeDetail.npub}
+                  <button onClick={()=>{navigator.clipboard.writeText(intakeDetail.npub);}} style={{marginLeft:8,fontSize:10,color:CS.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>Copy</button>
+                </div>}
+                <button onClick={async()=>{
+                  if(!intakeDetail.npub){alert("No guardian npub — parent hasn't completed onboarding yet.");return;}
+                  if(!confirm(`Create patient records for this family?\n\nChild: ${intakeDetail.child_name||"(name needed)"} (DOB: ${intakeDetail.date_of_birth||"unknown"})\nGuardian: ${intakeDetail.name} (npub: ${intakeDetail.npub.substring(0,20)}...)\n\nThis will:\n1. Create child patient record (practice-keyed)\n2. Import guardian by npub\n3. Link guardian → child\n4. Publish guardian grant\n5. Sync both to billing + relay whitelist`))return;
+                  try{
+                    // 1. Create child patient (practice-keyed)
+                    const childName=intakeDetail.child_name||intakeDetail.name+"'s child";
+                    const {patient:childPatient,nsec:childNsec}=addPatient({
+                      name:childName, dob:intakeDetail.date_of_birth||"", sex:"unknown" as const,
+                      phone:intakeDetail.phone||undefined, state:intakeDetail.state||undefined,
+                      storeNsec:true, billingModel:"per-visit",
+                    });
+                    // 2. Import guardian by npub
+                    const guardian=addPatientByNpub({
+                      name:intakeDetail.name, npub:intakeDetail.npub,
+                      phone:intakeDetail.phone||undefined, email:intakeDetail.email||undefined,
+                      state:intakeDetail.state||undefined, billingModel:"per-visit",
+                    });
+                    // 3. Link guardian → child
+                    const all=loadPatients();
+                    const gRec=all.find(p=>p.id===guardian.id);
+                    const cRec=all.find(p=>p.id===childPatient.id);
+                    if(gRec&&cRec){
+                      gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
+                      cRec.guardianNpub=guardian.npub;
+                      savePatients(all);
+                    }
+                    // 4. Publish demographics + grants for child
+                    publishPatientDemographics(childPatient,keys,relay);
+                    publishPatientGrantsForStaff(childPatient,keys,relay);
+                    publishPatientGrantForFhirAgent(childPatient,keys,relay);
+                    // 5. Publish demographics for guardian
+                    publishPatientDemographics(guardian,keys,relay);
+                    publishPatientGrantsForStaff(guardian,keys,relay);
+                    publishPatientGrantForFhirAgent(guardian,keys,relay);
+                    // 6. Publish guardian grant (kind 2104)
+                    const guardianPkHex=npubToHex(guardian.npub!);
+                    await publishGuardianGrant(childPatient,guardianPkHex,keys,relay);
+                    // 7. Sync both to billing
+                    if(BILLING_URL){
+                      try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:childPatient.npub,billing_model:'per-visit',name:childPatient.name})});}catch{}
+                      try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:guardian.npub,billing_model:'per-visit',name:guardian.name})});}catch{}
+                    }
+                    // 8. Update intake status
+                    try{await fetch(`${CAL_API}/api/intake/${intakeDetail.id}/scheduled`,{method:'POST',headers:{'Content-Type':'application/json'}});}catch{}
+
+                    setIntakeDetail(null);
+                    await loadIntake();
+                    setPatients(loadPatients());
+                    alert(`✅ Family created!\n\nChild: ${childPatient.name} (practice-keyed)\nGuardian: ${guardian.name} (self-keyed)\n\nGuardian grant published. Both synced to billing.\n\nThe child's access code is stored — you can view it in the child's Portal Access panel.\n\nReminder: run sync-whitelist.sh on the server to update the relay whitelist, or wait for the next cron cycle.`);
+                  }catch(err){
+                    alert("Error creating family: "+(err instanceof Error?err.message:"unknown"));
+                  }
+                }}
+                style={{width:"100%",padding:"12px 20px",borderRadius:8,fontSize:14,fontWeight:700,background:CS.green,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+                  Create Child Patient + Link Guardian →
+                </button>
+              </div>
+            </>}
           </div>
         </div>
       )}

@@ -343,14 +343,39 @@ function initIntakeSchema() {
 // Call this on startup
 try { initIntakeSchema(); } catch(e) { console.error("[db] Intake schema error:", e.message); }
 
+// ─── Intake Schema Migration (Phase 5b: Onboarding Pipeline) ────────────────
+
+function migrateIntakeSchema() {
+  const d = getDb();
+  try {
+    const cols = d.prepare("PRAGMA table_info(intake_requests)").all();
+    const hasContactPref = cols.some(c => c.name === "contact_preference");
+    if (!hasContactPref) {
+      d.exec("ALTER TABLE intake_requests ADD COLUMN contact_preference TEXT DEFAULT 'email'");
+      console.log("[db] Added contact_preference column to intake_requests");
+    }
+    const hasChildName = cols.some(c => c.name === "child_name");
+    if (!hasChildName) {
+      d.exec("ALTER TABLE intake_requests ADD COLUMN child_name TEXT");
+      console.log("[db] Added child_name column to intake_requests");
+    }
+  } catch (e) {
+    console.error("[db] Intake migration error:", e.message);
+  }
+}
+
+try { migrateIntakeSchema(); } catch(e) { console.error("[db] Intake migration:", e.message); }
+
+// ─── Intake Queries ─────────────────────────────────────────────────────────
+
 function createIntakeRequest(data) {
   return getDb().prepare(`
     INSERT INTO intake_requests
       (name, email, phone, date_of_birth, state, chief_complaint,
-       preferred_date, preferred_time, npub)
+       preferred_date, preferred_time, npub, contact_preference, child_name)
     VALUES
       (@name, @email, @phone, @date_of_birth, @state, @chief_complaint,
-       @preferred_date, @preferred_time, @npub)
+       @preferred_date, @preferred_time, @npub, @contact_preference, @child_name)
   `).run(data);
 }
 
@@ -391,6 +416,34 @@ function getAllIntake(limit = 50) {
   `).all(limit);
 }
 
+function updateIntakeNpub(id, npub) {
+  // Transition approved → ready when patient submits their npub
+  return getDb().prepare(
+    "UPDATE intake_requests SET npub = ?, status = 'ready' WHERE id = ? AND status = 'approved'"
+  ).run(npub, id);
+}
+
+function getIntakeByStatus(...statuses) {
+  const placeholders = statuses.map(() => "?").join(",");
+  return getDb().prepare(
+    `SELECT * FROM intake_requests WHERE status IN (${placeholders}) ORDER BY created_at ASC`
+  ).all(...statuses);
+}
+
+function expireStaleIntake(daysOld = 14) {
+  return getDb().prepare(
+    `UPDATE intake_requests SET status = 'expired' 
+     WHERE status = 'approved' 
+     AND created_at < datetime('now', '-' || ? || ' days')`
+  ).run(daysOld);
+}
+
+function markIntakeScheduled(id) {
+  return getDb().prepare(
+    "UPDATE intake_requests SET status = 'scheduled' WHERE id = ? AND status = 'ready'"
+  ).run(id);
+}
+
 module.exports = {
   ...module.exports,
   createIntakeRequest,
@@ -398,4 +451,8 @@ module.exports = {
   getIntakeById,
   updateIntakeStatus,
   getAllIntake,
+  updateIntakeNpub,
+  getIntakeByStatus,
+  expireStaleIntake,
+  markIntakeScheduled,
 };

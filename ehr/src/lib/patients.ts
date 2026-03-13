@@ -40,6 +40,10 @@ export interface Patient {
   keySource:     "practice" | "self";   // who generated/holds the keys
   billingModel:  "monthly" | "per-visit"; // how they pay
   nsecStored?:   boolean;               // did the doctor choose to retain the nsec locally?
+
+  // Phase 6: Guardian model
+  guardianOf?:   string[];       // array of child patient IDs this person is guardian of
+  guardianNpub?: string;         // for child patients: their primary guardian's npub
 }
 
 const KEY = "nostr_ehr_patients";
@@ -224,4 +228,49 @@ export function ageFromDob(dob: string): { years: number; months: number; displa
   const totalMonths = years * 12 + months;
   if (totalMonths < 24) return { years, months, display: `${totalMonths}mo` };
   return { years, months, display: `${years}y ${months}mo` };
+}
+
+// ─── Guardian Management ────────────────────────────────────────────────────
+
+/** Link a guardian to a child patient (both directions in localStorage). */
+export function linkGuardian(guardianId: string, childId: string, guardianNpub: string): void {
+  const all = loadPatients();
+  const guardian = all.find(p => p.id === guardianId);
+  const child = all.find(p => p.id === childId);
+  if (!guardian || !child) throw new Error("Patient not found");
+
+  const existing = guardian.guardianOf || [];
+  if (!existing.includes(childId)) {
+    guardian.guardianOf = [...existing, childId];
+  }
+  child.guardianNpub = guardianNpub;
+  savePatients(all);
+}
+
+/** Unlink a guardian from a child patient. */
+export function unlinkGuardian(guardianId: string, childId: string): void {
+  const all = loadPatients();
+  const guardian = all.find(p => p.id === guardianId);
+  const child = all.find(p => p.id === childId);
+
+  if (guardian && guardian.guardianOf) {
+    guardian.guardianOf = guardian.guardianOf.filter(id => id !== childId);
+    if (guardian.guardianOf.length === 0) delete guardian.guardianOf;
+  }
+  if (child) delete child.guardianNpub;
+  savePatients(all);
+}
+
+/** Get all children for a guardian. */
+export function getGuardianChildren(guardianId: string): Patient[] {
+  const all = loadPatients();
+  const guardian = all.find(p => p.id === guardianId);
+  if (!guardian?.guardianOf?.length) return [];
+  return all.filter(p => guardian.guardianOf!.includes(p.id));
+}
+
+/** Get the guardian(s) for a child patient. */
+export function getChildGuardians(childId: string): Patient[] {
+  const all = loadPatients();
+  return all.filter(p => p.guardianOf?.includes(childId));
 }

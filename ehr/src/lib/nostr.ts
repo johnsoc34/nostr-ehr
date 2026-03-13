@@ -48,7 +48,7 @@ function liftX(x: bigint):Point|null{
   return new Point(x,y%2n===0n?y:P-y);
 }
 async function sha256(b: Uint8Array):Promise<Uint8Array>{
-  return new Uint8Array(await crypto.subtle.digest("SHA-256",b.buffer as ArrayBuffer));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256",b));
 }
 export function toBytes(n: bigint,len=32):Uint8Array{
   const a=new Uint8Array(len);
@@ -242,6 +242,7 @@ export const STAFF_KINDS = {
   PatientKeyGrant:   2100,   // per-staff per-patient shared secret — practice-signed (was 1012)
   PracticeKeyGrant:  2101,   // per-staff practice shared secret (X₁) — practice-signed (was 1013)
   StaffRoster:       2102,   // regular event — latest by created_at wins (was 1014)
+  GuardianGrant:     2104,   // guardian (parent) access to child's records — practice-signed
 } as const;
 
 /** Staff roles with increasing privilege levels */
@@ -281,22 +282,36 @@ export interface StaffMember {
   revokedAt?: number;      // unix timestamp if soft-revoked (still in roster for history)
 }
 
-/** Encrypted content of a kind 2102 StaffRoster event */
+/** Encrypted content of a kind 30078 StaffRoster event */
 export interface StaffRosterPayload {
   staff: StaffMember[];
 }
 
-/** Encrypted content of a kind 2101 PracticeKeyGrant event */
+/** Encrypted content of a kind 1013 PracticeKeyGrant event */
 export interface PracticeKeyGrantPayload {
   practiceSharedSecret: string;  // hex-encoded X₁ = getSharedSecret(practiceSk, practicePkHex)
   practicePkHex: string;         // practice public key for reference
 }
 
-/** Encrypted content of a kind 2100 PatientKeyGrant event */
+/** Encrypted content of a kind 1012 PatientKeyGrant event */
 export interface PatientKeyGrantPayload {
   patientId: string;             // patient UUID
   patientPkHex: string;          // patient public key (hex)
   patientSharedSecret: string;   // hex-encoded X₂ = getSharedSecret(practiceSk, patientPkHex)
+}
+
+/** Encrypted content of a kind 2104 GuardianGrant event.
+ *  Gives a guardian (parent) read access to a child patient's records.
+ *  Guardian decrypts with getSharedSecret(guardianSk, practicePk) to get the child's
+ *  X₂ shared secret, letting them decrypt patient-content tags on the child's events.
+ *  Published by practice key. Does NOT contain the child's nsec — guardian gets read-only
+ *  clinical data access + messaging ability, not key ownership. */
+export interface GuardianGrantPayload {
+  childPatientId: string;          // child's patient UUID
+  childPkHex: string;              // child's public key (hex)
+  childSharedSecret: string;       // hex-encoded X₂ = getSharedSecret(practiceSk, childPkHex)
+  childName: string;               // display name for portal patient switcher
+  guardianPkHex: string;           // guardian's public key (hex) — for reference
 }
 
 /** Session state for a logged-in staff member (held in React state, never persisted) */
@@ -329,6 +344,6 @@ export function isValidRosterEvent(event: NostrEvent, practicePkHex: string): bo
 
 /** Validate that a key grant event is signed by the practice key */
 export function isValidGrantEvent(event: NostrEvent, practicePkHex: string): boolean {
-  return (event.kind === STAFF_KINDS.PracticeKeyGrant || event.kind === STAFF_KINDS.PatientKeyGrant)
+  return (event.kind === STAFF_KINDS.PracticeKeyGrant || event.kind === STAFF_KINDS.PatientKeyGrant || event.kind === STAFF_KINDS.GuardianGrant)
     && event.pubkey === practicePkHex;
 }

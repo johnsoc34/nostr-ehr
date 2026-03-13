@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   nsecToBytes, getPublicKey, getSharedSecret, toHex, fromHex,
-  npubToHex, FHIR_KINDS, type NostrEvent, buildAndSignEvent
+  npubToHex, FHIR_KINDS, STAFF_KINDS, type NostrEvent, buildAndSignEvent
 } from "../lib/nostr";
 import { nip44Decrypt, nip44Encrypt } from "../lib/nip44";
 import VideoRoom from "../lib/VideoRoom";
@@ -305,6 +305,14 @@ interface PatientKeys {
   name?: string;
   npub?: string;
   nip07?: boolean;       // true = window.nostr holds the key
+  overrideSharedSecret?: Uint8Array;  // pre-computed X₂ for guardian viewing child's records
+}
+
+interface GuardianChild {
+  childPatientId: string;
+  childPkHex: string;
+  childSharedSecret: Uint8Array;  // X₂ — pre-computed, from decrypted guardian grant
+  childName: string;
 }
 
 // ─── Portal Crypto Abstraction ────────────────────────────────────────────────
@@ -322,7 +330,8 @@ async function portalDecrypt(
     if (!w?.nip44?.decrypt) throw new Error("NIP-07 extension does not support NIP-44");
     return await w.nip44.decrypt(otherPkHex, ciphertext);
   }
-  const sharedX = getSharedSecret(keys.sk, otherPkHex);
+  // Guardian viewing child: use pre-computed X₂ from grant instead of ECDH
+  const sharedX = keys.overrideSharedSecret || getSharedSecret(keys.sk, otherPkHex);
   return nip44Decrypt(ciphertext, sharedX);
 }
 
@@ -3186,6 +3195,9 @@ export default function PatientPortal() {
   const [dark, setDark] = useState(true);
   const [videoCall, setVideoCall] = useState<{appointmentId:number}|null>(null);
   const [showPracticeSwitcher, setShowPracticeSwitcher] = useState(false);
+  const [guardianChildren, setGuardianChildren] = useState<GuardianChild[]>([]);
+  const [activeChild, setActiveChild] = useState<GuardianChild|null>(null);
+  const [showPatientSwitcher, setShowPatientSwitcher] = useState(false);
 
   // PIN auth state
   const [pinCredential, setPinCredential] = useState<StoredCredential | null>(null);
@@ -3196,6 +3208,45 @@ export default function PatientPortal() {
 
   const relay = useRelay(activeConnection?.relay || connections[0]?.relay || "wss://localhost");
   const T = dark ? DARK : LIGHT;
+
+  // Fetch guardian grants (kind 2104) to discover children this user can view
+  useEffect(() => {
+    if (!keys || !activeConnection || relay.status !== "connected") return;
+    const grants: NostrEvent[] = [];
+    const subId = relay.subscribe(
+      { kinds: [STAFF_KINDS.GuardianGrant], "#p": [keys.pkHex], limit: 50 },
+      (ev: NostrEvent) => { if (!grants.find(g => g.id === ev.id)) grants.push(ev); }
+    );
+    const timer = setTimeout(async () => {
+      relay.unsubscribe(subId);
+      const children: GuardianChild[] = [];
+      for (const ev of grants) {
+        try {
+          const sharedX = getSharedSecret(keys.sk, ev.pubkey); // practice signed it
+          const plain = await nip44Decrypt(ev.content, sharedX);
+          const payload = JSON.parse(plain);
+          if (payload.childPatientId && payload.childPkHex && payload.childSharedSecret) {
+            const existing = children.findIndex(c => c.childPatientId === payload.childPatientId);
+            const child: GuardianChild = {
+              childPatientId: payload.childPatientId,
+              childPkHex: payload.childPkHex,
+              childSharedSecret: fromHex(payload.childSharedSecret),
+              childName: payload.childName || "Child",
+            };
+            if (existing >= 0) children[existing] = child;
+            else children.push(child);
+          }
+        } catch (e) {
+          console.warn("[Guardian] Failed to decrypt grant:", e);
+        }
+      }
+      if (children.length > 0) {
+        console.log(`[Guardian] Found ${children.length} child patient(s)`);
+        setGuardianChildren(children);
+      }
+    }, 2500);
+    return () => { clearTimeout(timer); try { relay.unsubscribe(subId); } catch {} };
+  }, [keys?.pkHex, activeConnection?.id, relay.status]);
 
   const toggleTheme = () => {
     setDark(d => !d);
@@ -3454,6 +3505,15 @@ export default function PatientPortal() {
     />;
   }
 
+  // Build viewing keys — either self or guardian-viewing-child
+  const viewingKeys: PatientKeys = activeChild ? {
+    ...keys,
+    pkHex: activeChild.childPkHex,
+    name: activeChild.childName,
+    overrideSharedSecret: activeChild.childSharedSecret,
+  } : keys;
+  const viewingName = activeChild ? activeChild.childName : (keys.name && keys.name !== "Patient" ? keys.name : "My Records");
+
   // Determine which tabs to show based on connection capabilities
   const hasCal = !!activeConnection.calendarApi;
   const tabs: [Tab, string, string][] = [
@@ -3475,12 +3535,17 @@ export default function PatientPortal() {
       <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "0 20px", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(12px)" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", height: 58 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: `linear-gradient(135deg, ${T.accent}, ${T.accentLt})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "#fff", fontFamily: "inherit", boxShadow: `0 2px 10px ${T.accent}35` }}>
-              {(keys.name && keys.name !== "Patient") ? keys.name[0].toUpperCase() : "P"}
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: `linear-gradient(135deg, ${activeChild ? T.blue : T.accent}, ${activeChild ? "#60a5fa" : T.accentLt})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "#fff", fontFamily: "inherit", boxShadow: `0 2px 10px ${T.accent}35` }}>
+              {viewingName[0].toUpperCase()}
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: T.text, letterSpacing: "-0.01em" }}>
-                {keys.name && keys.name !== "Patient" ? keys.name : "Patient Portal"}{" "}
+              <div style={{ fontWeight: 700, fontSize: 13, color: T.text, letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 6 }}>
+                {viewingName}
+                {guardianChildren.length > 0 && (
+                  <button onClick={() => setShowPatientSwitcher(s => !s)} style={{ background: T.surfaceHi, border: `1px solid ${T.border}`, borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 600, color: T.textMuted, cursor: "pointer", fontFamily: "inherit" }}>
+                    ▾ Switch
+                  </button>
+                )}
               </div>
               <div onClick={connections.length > 1 ? () => setShowPracticeSwitcher(s => !s) : undefined}
                 style={{ fontSize: 11, color: relayColor, display: "flex", alignItems: "center", gap: 4, cursor: connections.length > 1 ? "pointer" : "default" }}>
@@ -3526,6 +3591,39 @@ export default function PatientPortal() {
                 </div>
               </>
             )}
+            {/* Patient switcher (guardian → children) */}
+            {showPatientSwitcher && guardianChildren.length > 0 && (
+              <>
+                <div onClick={() => setShowPatientSwitcher(false)} style={{ position: "fixed", inset: 0, zIndex: 150 }} />
+                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.3)", zIndex: 151, minWidth: 220, overflow: "hidden" }}>
+                  <div style={{ padding: "8px 12px", fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, borderBottom: `1px solid ${T.border}` }}>
+                    Switch Patient
+                  </div>
+                  <div onClick={() => { setActiveChild(null); setShowPatientSwitcher(false); }}
+                    style={{ padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: !activeChild ? `${T.accent}10` : "transparent", borderLeft: !activeChild ? `3px solid ${T.accent}` : "3px solid transparent" }}
+                    onMouseEnter={e => { if (activeChild) (e.currentTarget as HTMLElement).style.background = T.surfaceHi; }}
+                    onMouseLeave={e => { if (activeChild) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 6, background: `${T.accent}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: T.accent, flexShrink: 0 }}>
+                      {(keys.name && keys.name !== "Patient") ? keys.name[0].toUpperCase() : "P"}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>My Records</div>
+                    {!activeChild && <span style={{ color: T.green, fontSize: 12, marginLeft: "auto" }}>●</span>}
+                  </div>
+                  {guardianChildren.map(child => (
+                    <div key={child.childPatientId} onClick={() => { setActiveChild(child); setShowPatientSwitcher(false); }}
+                      style={{ padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: activeChild?.childPatientId === child.childPatientId ? `${T.blue}10` : "transparent", borderLeft: activeChild?.childPatientId === child.childPatientId ? `3px solid ${T.blue}` : "3px solid transparent" }}
+                      onMouseEnter={e => { if (activeChild?.childPatientId !== child.childPatientId) (e.currentTarget as HTMLElement).style.background = T.surfaceHi; }}
+                      onMouseLeave={e => { if (activeChild?.childPatientId !== child.childPatientId) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: `${T.blue}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: T.blue, flexShrink: 0 }}>
+                        {child.childName[0].toUpperCase()}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{child.childName}</div>
+                      {activeChild?.childPatientId === child.childPatientId && <span style={{ color: T.green, fontSize: 12, marginLeft: "auto" }}>●</span>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button onClick={toggleTheme} style={{ background: T.surfaceHi, border: `1px solid ${T.border}`, borderRadius: 7, padding: "6px 9px", cursor: "pointer", color: T.textMuted, fontSize: 14, lineHeight: 1 }}>
@@ -3556,12 +3654,12 @@ export default function PatientPortal() {
 
       {/* Content */}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 20px" }}>
-        {tab === "records"       && <VisitHistory      keys={keys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
-        {tab === "vitals"        && <VitalsView        keys={keys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
-        {tab === "meds"          && <MedicationsView   keys={keys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
-        {tab === "immunizations" && <ImmunizationsView keys={keys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
-        {tab === "messages"      && <MessagingView     keys={keys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
-        {tab === "appointments"  && <AppointmentsView  keys={keys} calendarApi={activeConnection.calendarApi} T={T} onJoinVideo={(id:number)=>setVideoCall({appointmentId:id})} />}
+        {tab === "records"       && <VisitHistory      keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
+        {tab === "vitals"        && <VitalsView        keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
+        {tab === "meds"          && <MedicationsView   keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
+        {tab === "immunizations" && <ImmunizationsView keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
+        {tab === "messages"      && <MessagingView     keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
+        {tab === "appointments"  && <AppointmentsView  keys={viewingKeys} calendarApi={activeConnection.calendarApi} T={T} onJoinVideo={(id:number)=>setVideoCall({appointmentId:id})} />}
         {tab === "mydata"        && <MyDataView        keys={keys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} connections={connections} T={T} />}
       </div>
 

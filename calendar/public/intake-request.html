@@ -1,375 +1,242 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Request a Virtual Consultation — Immutable Health Pediatrics</title>
-  <meta name="description" content="Request a virtual pediatric consultation. Bitcoin-native, Nostr-encrypted, available statewide." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: #0a0d12; --surface: #111620; --surfaceHi: #1a2233;
-      --border: #1e2d44; --text: #e8edf5; --textMuted: #6b7fa3;
-      --accent: #f7931a; --accentLt: #fbb040;
-      --green: #22c55e; --red: #ef4444; --amber: #f59e0b;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: 'DM Sans', system-ui, sans-serif;
-      background: var(--bg); color: var(--text);
-      font-size: 15px; line-height: 1.6;
-      min-height: 100vh;
-    }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { color: var(--accentLt); }
-
-    /* ── Layout ── */
-    .wrapper { max-width: 620px; margin: 0 auto; padding: 48px 24px 80px; }
-
-    /* ── Header ── */
-    .logo-bar {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 40px;
-    }
-    .logo-mark {
-      width: 34px; height: 34px; border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent), var(--accentLt));
-      display: flex; align-items: center; justify-content: center;
-      font-size: 17px; font-weight: 800; color: #fff;
-      box-shadow: 0 2px 12px rgba(247,147,26,0.3);
-      flex-shrink: 0;
-    }
-    .logo-text { font-size: 15px; font-weight: 700; }
-    .logo-text span { color: var(--textMuted); font-weight: 500; }
-
-    .page-title {
-      font-size: clamp(24px, 4vw, 32px); font-weight: 800;
-      letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 12px;
-    }
-    .page-sub {
-      font-size: 15px; color: var(--textMuted); line-height: 1.65; margin-bottom: 36px;
-    }
-
-    /* ── Card ── */
-    .card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 14px; padding: 28px; margin-bottom: 24px;
-    }
-    .card h3 { font-size: 14px; font-weight: 700; margin-bottom: 18px; }
-
-    /* ── Form ── */
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-    .form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-    .form-row .form-field { margin-bottom: 0; }
-    .form-field label {
-      font-size: 11px; font-weight: 600; color: var(--textMuted);
-      text-transform: uppercase; letter-spacing: 0.06em;
-    }
-    .form-field .req { color: var(--red); }
-    .form-field input,
-    .form-field textarea,
-    .form-field select {
-      padding: 10px 14px; border-radius: 9px;
-      border: 1px solid var(--border); background: var(--surfaceHi);
-      color: var(--text); font-size: 14px; font-family: inherit;
-      outline: none; transition: border-color 0.15s, box-shadow 0.15s;
-      resize: vertical;
-    }
-    .form-field input:focus,
-    .form-field textarea:focus,
-    .form-field select:focus {
-      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(247,147,26,0.13);
-    }
-    .form-field select option { background: var(--surface); }
-    .form-field input::placeholder,
-    .form-field textarea::placeholder { color: #3d5070; }
-    .form-hint { font-size: 11px; color: var(--textMuted); margin-top: 2px; }
-
-    /* ── Buttons ── */
-    .btn-submit {
-      display: block; width: 100%; padding: 13px; border-radius: 10px;
-      background: var(--accent); color: #fff; border: none;
-      font-size: 15px; font-weight: 700; cursor: pointer;
-      font-family: inherit; transition: all 0.15s;
-      box-shadow: 0 4px 20px rgba(247,147,26,0.3);
-    }
-    .btn-submit:hover { background: var(--accentLt); transform: translateY(-1px); }
-    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-    /* ── State error ── */
-    .state-error {
-      display: none; padding: 14px 16px; border-radius: 10px;
-      background: #ef444415; border: 1px solid #ef444440;
-      color: var(--red); font-size: 13px; font-weight: 500;
-      margin-bottom: 14px; line-height: 1.5;
-    }
-    .state-error.show { display: block; }
-
-    /* ── Success ── */
-    .success-card {
-      display: none; text-align: center; padding: 48px 28px;
-    }
-    .success-card.show { display: block; }
-    .success-card .icon { font-size: 48px; margin-bottom: 16px; }
-    .success-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.02em; }
-    .success-card p { color: var(--textMuted); line-height: 1.65; }
-
-    /* ── Info cards ── */
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
-    .info-item {
-      background: var(--surfaceHi); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px 16px;
-    }
-    .info-item .icon { font-size: 18px; margin-bottom: 6px; }
-    .info-item h4 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
-    .info-item p { font-size: 12px; color: var(--textMuted); line-height: 1.5; }
-
-    /* ── Footer ── */
-    .footer {
-      text-align: center; padding-top: 32px; border-top: 1px solid var(--border);
-      margin-top: 24px;
-    }
-    .footer p { font-size: 12px; color: var(--textMuted); }
-
-    /* ── Responsive ── */
-    @media (max-width: 580px) {
-      .form-row { grid-template-columns: 1fr; }
-      .info-grid { grid-template-columns: 1fr; }
-      .wrapper { padding: 32px 18px 60px; }
-    }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Request a Virtual Consultation — Immutable Health Pediatrics</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#0a0d12;color:#e8edf5;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+a{color:#f7931a;text-decoration:none}
+a:hover{text-decoration:underline}
+.container{max-width:600px;width:100%;padding:32px 20px}
+.logo-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,#f7931a,#f59e0b);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0}
+.logo-name{font-size:16px;font-weight:700;letter-spacing:-0.02em}
+.logo-sub{font-size:11px;color:#6b7fa3}
+h1{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:20px 0 6px}
+.subtitle{font-size:14px;color:#6b7fa3;line-height:1.6;margin-bottom:28px}
+.form-card{background:#111620;border:1px solid #1e2d44;border-radius:14px;padding:28px}
+.section-label{font-size:10px;font-weight:700;color:#6b7fa3;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:14px;margin-top:20px;padding-top:14px;border-top:1px solid #1e2d44}
+.section-label:first-child{margin-top:0;padding-top:0;border-top:none}
+.field{margin-bottom:16px}
+.field label{font-size:12px;font-weight:600;color:#94a3b8;display:block;margin-bottom:6px}
+.field label .req{color:#ef4444;margin-left:2px}
+.field label .opt{color:#4a5568;font-weight:400}
+.field input,.field select,.field textarea{width:100%;padding:10px 14px;border-radius:8px;border:1px solid #1e2d44;background:#1a2233;color:#e8edf5;font-size:14px;font-family:inherit;outline:none;transition:border-color 0.2s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#f7931a}
+.field textarea{resize:vertical;min-height:80px}
+.field .hint{font-size:11px;color:#4a5568;margin-top:4px;line-height:1.4}
+.field select{cursor:pointer;appearance:auto}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:480px){.row{grid-template-columns:1fr}}
+.radio-group{display:flex;gap:12px;margin-top:6px}
+.radio-option{display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 16px;border-radius:8px;border:1px solid #1e2d44;background:#1a2233;transition:all 0.15s}
+.radio-option:hover{border-color:#3b82f6}
+.radio-option.active{border-color:#f7931a;background:#f7931a10}
+.radio-option input[type="radio"]{accent-color:#f7931a;cursor:pointer}
+.radio-option span{font-size:13px;color:#94a3b8}
+.radio-option.active span{color:#e8edf5;font-weight:500}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all 0.15s;width:100%;margin-top:8px}
+.btn-primary{background:#f7931a;color:#fff}
+.btn-primary:hover{background:#e8851a;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.success-card{background:#111620;border:1px solid #166534;border-radius:14px;padding:36px 28px;text-align:center}
+.success-card .check{font-size:36px;margin-bottom:12px}
+.success-card h2{font-size:20px;font-weight:800;margin-bottom:8px;color:#22c55e}
+.success-card p{font-size:13px;color:#94a3b8;line-height:1.6}
+.error-msg{background:#3b0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#fca5a5;font-size:13px;display:none}
+.hidden{display:none!important}
+</style>
 </head>
 <body>
-
-<div class="wrapper">
-  <!-- Logo -->
-  <a href="https://immutablehealthpediatrics.com" class="logo-bar">
-    <div class="logo-mark">Ⅰ</div>
-    <div class="logo-text">Immutable Health <span>Pediatrics</span></div>
-  </a>
-
-  <h1 class="page-title">Request a Virtual Consultation</h1>
-  <p class="page-sub">
-    Submit a request and we'll get back to you within 24 hours to confirm your appointment.
-    All virtual visits are conducted via encrypted video on our patient portal.
-  </p>
-
-  <!-- Info cards -->
-  <div class="info-grid">
-    <div class="info-item">
-      <div class="icon">🩺</div>
-      <h4>Pediatric Care</h4>
-      <p>Ages 0–18. Sick visits, follow-ups, second opinions, and more.</p>
-    </div>
-    <div class="info-item">
-      <div class="icon">📱</div>
-      <h4>Encrypted Video</h4>
-      <p>End-to-end encrypted telehealth. Your data stays yours.</p>
-    </div>
-    <div class="info-item">
-      <div class="icon">₿</div>
-      <h4>Bitcoin Accepted</h4>
-      <p>Pay via Lightning, on-chain, or traditional card/ACH.</p>
-    </div>
-    <div class="info-item">
-      <div class="icon">⚡</div>
-      <h4>Quick Turnaround</h4>
-      <p>Most requests confirmed within 24 hours.</p>
+<div class="container">
+  <div class="logo-row">
+    <div class="logo-icon">Ⅰ</div>
+    <div>
+      <div class="logo-name">Immutable Health Pediatrics</div>
+      <div class="logo-sub">Virtual Care</div>
     </div>
   </div>
-
-  <!-- Form -->
-  <div class="card" id="formCard">
-    <h3>Your Information</h3>
-    <form id="intakeForm" onsubmit="submitForm(event)">
-
-      <div class="form-row">
-        <div class="form-field">
-          <label>Parent / Guardian Name <span class="req">*</span></label>
-          <input type="text" id="name" required placeholder="Jane Smith" />
-        </div>
-        <div class="form-field">
-          <label>Phone <span class="req">*</span></label>
-          <input type="tel" id="phone" required placeholder="(555) 123-4567" />
-        </div>
+  <h1>Request a Virtual Consultation</h1>
+  <p class="subtitle">Fill out the form below and we'll review your request. Most requests are reviewed within 24 hours.</p>
+  <div id="formCard" class="form-card">
+    <div id="errorBox" class="error-msg"></div>
+    <div class="section-label">Parent / Guardian Information</div>
+    <div class="field">
+      <label>Full Name <span class="req">*</span></label>
+      <input type="text" id="name" placeholder="Jane Smith"/>
+    </div>
+    <div class="field">
+      <label>How should we contact you? <span class="req">*</span></label>
+      <div class="radio-group">
+        <label class="radio-option active" id="optEmail">
+          <input type="radio" name="contact_preference" value="email" checked onchange="setContactPref('email')"/>
+          <span>📧 Email</span>
+        </label>
+        <label class="radio-option" id="optText">
+          <input type="radio" name="contact_preference" value="text" onchange="setContactPref('text')"/>
+          <span>💬 Text Message</span>
+        </label>
       </div>
-
-      <div class="form-row">
-        <div class="form-field">
-          <label>Email</label>
-          <input type="email" id="email" placeholder="you@example.com" />
-        </div>
-        <div class="form-field">
-          <label>Child's Date of Birth <span class="req">*</span></label>
-          <input type="date" id="dob" required />
-        </div>
+      <div class="hint">We'll use this to send your onboarding link after approval.</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label id="emailLabel">Email <span class="req">*</span></label>
+        <input type="email" id="email" placeholder="jane@example.com"/>
       </div>
-
-      <div class="form-field">
+      <div class="field">
+        <label id="phoneLabel">Phone <span class="opt">(optional)</span></label>
+        <input type="tel" id="phone" placeholder="(555) 555-1234"/>
+      </div>
+    </div>
+    <div class="section-label">Child Information</div>
+    <div class="field">
+      <label>Child's Full Name <span class="req">*</span></label>
+      <input type="text" id="childName" placeholder="Emma Smith"/>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Child's Date of Birth <span class="req">*</span></label>
+        <input type="date" id="dob"/>
+      </div>
+      <div class="field">
         <label>State of Residence <span class="req">*</span></label>
-        <select id="state" required onchange="checkState()">
-          <option value="">Select your state...</option>
+        <select id="state">
+          <option value="">Select state...</option>
         </select>
-        <div class="form-hint">We can only see patients in states where we are licensed.</div>
+        <div class="hint">We can only see patients in states where we're licensed.</div>
       </div>
-
-      <div class="state-error" id="stateError">
-        We're sorry — we are not currently licensed to practice in your state.
-        We can only provide virtual consultations to patients located in states where we hold an active medical license.
+    </div>
+    <div class="section-label">Visit Details</div>
+    <div class="field">
+      <label>Chief Complaint <span class="req">*</span></label>
+      <textarea id="complaint" placeholder="Briefly describe the reason for your visit — what symptoms, how long, any relevant history..."></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Preferred Date <span class="opt">(optional)</span></label>
+        <input type="date" id="prefDate"/>
       </div>
-
-      <div class="form-field">
-        <label>What brings you in? <span class="req">*</span></label>
-        <textarea id="complaint" required rows="4" placeholder="Describe your child's symptoms or reason for visit..."></textarea>
+      <div class="field">
+        <label>Preferred Time <span class="opt">(optional)</span></label>
+        <select id="prefTime">
+          <option value="">No preference</option>
+          <option value="morning">Morning (9am-12pm)</option>
+          <option value="afternoon">Afternoon (12pm-4pm)</option>
+        </select>
       </div>
-
-      <div class="form-row">
-        <div class="form-field">
-          <label>Preferred Date</label>
-          <input type="date" id="prefDate" />
-        </div>
-        <div class="form-field">
-          <label>Preferred Time</label>
-          <select id="prefTime">
-            <option value="">No preference</option>
-            <option value="morning">Morning (9am–12pm)</option>
-            <option value="afternoon">Afternoon (12pm–4pm)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-field">
-        <label>Nostr npub <span style="color:var(--textMuted);font-weight:400;text-transform:none;letter-spacing:0">(optional — if you already have a Nostr health identity)</span></label>
-        <input type="text" id="npub" placeholder="npub1..." style="font-family:'IBM Plex Mono',monospace;font-size:13px" />
-      </div>
-
-      <button type="submit" class="btn-submit" id="submitBtn">Submit Request →</button>
-    </form>
+    </div>
+    <div class="section-label" style="color:#4a5568">Nostr Identity <span style="font-weight:400;text-transform:none;letter-spacing:0">(Advanced)</span></div>
+    <div class="field">
+      <label>Nostr npub <span class="opt">— optional. If you already have a Nostr identity, enter it here.</span></label>
+      <input type="text" id="npub" placeholder="npub1..." style="font-family:'IBM Plex Mono',monospace;font-size:12px"/>
+      <div class="hint">If you don't have one, you'll create one during onboarding after your request is approved.</div>
+    </div>
+    <button class="btn btn-primary" id="submitBtn" onclick="submitForm()">Submit Request →</button>
   </div>
-
-  <!-- Success card (hidden until submission) -->
-  <div class="card success-card" id="successCard">
-    <div class="icon">✅</div>
-    <h2>Request Submitted</h2>
-    <p>
-      Thank you! We've received your consultation request.
-      We'll review it and get back to you within 24 hours to confirm your appointment
-      and send you portal access instructions.
-    </p>
-    <p style="margin-top:16px">
-      <a href="https://immutablehealthpediatrics.com">← Back to Immutable Health Pediatrics</a>
-    </p>
-  </div>
-
-  <!-- Footer -->
-  <div class="footer">
-    <p>© 2026 Immutable Health Pediatrics · <a href="https://immutablehealthpediatrics.com">immutablehealthpediatrics.com</a></p>
+  <div id="successCard" class="success-card hidden">
+    <div class="check">✅</div>
+    <h2>Request Submitted!</h2>
+    <p>Thank you! We'll review your request and reach out via your preferred contact method, usually within 24 hours.</p>
   </div>
 </div>
-
 <script>
-  // ── Licensed states — loaded from server, fallback hardcoded ──
-  let LICENSED_STATES = [];
+var contactPref = "email";
 
-  const ALL_STATES = [
-    "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
-    "Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa",
-    "Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan",
-    "Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire",
-    "New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio",
-    "Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota",
-    "Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia",
-    "Wisconsin","Wyoming","District of Columbia"
-  ];
+function setContactPref(value) {
+  contactPref = value;
+  document.getElementById("optEmail").classList.toggle("active", value === "email");
+  document.getElementById("optText").classList.toggle("active", value === "text");
+  document.getElementById("emailLabel").innerHTML = value === "email"
+    ? 'Email <span class="req">*</span>'
+    : 'Email <span class="opt">(optional)</span>';
+  document.getElementById("phoneLabel").innerHTML = value === "text"
+    ? 'Phone <span class="req">*</span>'
+    : 'Phone <span class="opt">(optional)</span>';
+}
 
-  // State abbreviations for matching
-  const STATE_ABBREVS = {
-    "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
-    "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
-    "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS",
-    "Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA",
-    "Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT",
-    "Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM",
-    "New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK",
-    "Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC",
-    "South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT",
-    "Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY",
-    "District of Columbia":"DC"
-  };
+function showError(msg) {
+  var el = document.getElementById("errorBox");
+  el.textContent = msg;
+  el.style.display = "block";
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
 
-  // Populate state dropdown
-  const sel = document.getElementById("state");
-  ALL_STATES.forEach(s => {
-    const opt = document.createElement("option");
-    opt.value = STATE_ABBREVS[s];
-    opt.textContent = s;
-    sel.appendChild(opt);
-  });
+function hideError() {
+  document.getElementById("errorBox").style.display = "none";
+}
 
-  // Load licensed states from server
-  fetch("/api/intake/states").then(r => r.json()).then(data => {
-    if (Array.isArray(data.states)) LICENSED_STATES = data.states;
-  }).catch(() => {});
+function submitForm() {
+  hideError();
+  var name = document.getElementById("name").value.trim();
+  var phone = document.getElementById("phone").value.trim();
+  var email = document.getElementById("email").value.trim();
+  var childName = document.getElementById("childName").value.trim();
+  var dob = document.getElementById("dob").value;
+  var state = document.getElementById("state").value;
+  var complaint = document.getElementById("complaint").value.trim();
+  var prefDate = document.getElementById("prefDate").value;
+  var prefTime = document.getElementById("prefTime").value;
+  var npub = document.getElementById("npub").value.trim();
 
-  function checkState() {
-    const val = document.getElementById("state").value;
-    const err = document.getElementById("stateError");
-    const btn = document.getElementById("submitBtn");
-    if (val && LICENSED_STATES.length > 0 && !LICENSED_STATES.includes(val)) {
-      err.classList.add("show");
-      btn.disabled = true;
-    } else {
-      err.classList.remove("show");
-      btn.disabled = false;
-    }
-  }
+  if (!name) return showError("Please enter your name.");
+  if (contactPref === "email" && !email) return showError("Please enter your email address.");
+  if (contactPref === "text" && !phone) return showError("Please enter your phone number.");
+  if (!childName) return showError("Please enter your child's name.");
+  if (!dob) return showError("Please enter your child's date of birth.");
+  if (!state) return showError("Please select your state of residence.");
+  if (!complaint) return showError("Please describe the reason for your visit.");
+  if (npub && npub.indexOf("nsec1") === 0) return showError("That looks like a private key (nsec). Never share your nsec!");
 
-  async function submitForm(e) {
-    e.preventDefault();
-    const btn = document.getElementById("submitBtn");
-    btn.disabled = true;
-    btn.textContent = "Submitting...";
+  var btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
 
-    const body = {
-      name: document.getElementById("name").value.trim(),
-      email: document.getElementById("email").value.trim() || null,
-      phone: document.getElementById("phone").value.trim() || null,
-      date_of_birth: document.getElementById("dob").value || null,
-      state: document.getElementById("state").value,
-      chief_complaint: document.getElementById("complaint").value.trim(),
-      preferred_date: document.getElementById("prefDate").value || null,
-      preferred_time: document.getElementById("prefTime").value || null,
-      npub: document.getElementById("npub").value.trim() || null,
-    };
-
-    try {
-      const res = await fetch("/api/intake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (res.ok) {
-        document.getElementById("formCard").style.display = "none";
-        document.getElementById("successCard").classList.add("show");
-      } else {
-        const err = await res.json().catch(() => ({ error: "Submission failed" }));
-        alert(err.error || "Something went wrong. Please try again.");
+  fetch("/api/intake", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: name, phone: phone, email: email,
+      child_name: childName, date_of_birth: dob, state: state,
+      chief_complaint: complaint,
+      preferred_date: prefDate || null, preferred_time: prefTime || null,
+      npub: npub || null, contact_preference: contactPref
+    })
+  }).then(function(res) {
+    if (!res.ok) {
+      return res.json().then(function(d) {
+        showError(d.error || "Something went wrong.");
         btn.disabled = false;
         btn.textContent = "Submit Request →";
-      }
-    } catch (err) {
-      alert("Network error — please check your connection and try again.");
-      btn.disabled = false;
-      btn.textContent = "Submit Request →";
+      });
     }
-  }
+    document.getElementById("formCard").classList.add("hidden");
+    document.getElementById("successCard").classList.remove("hidden");
+  }).catch(function() {
+    showError("Network error. Please check your connection.");
+    btn.disabled = false;
+    btn.textContent = "Submit Request →";
+  });
+}
 
-  // Set min date for preferred date to tomorrow
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  document.getElementById("prefDate").min = tomorrow.toISOString().split("T")[0];
+(function() {
+  fetch("/api/intake/states").then(function(r) { return r.json(); }).then(function(data) {
+    var states = data.states || [];
+    var names = {AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",DE:"Delaware",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",IA:"Iowa",KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",MI:"Michigan",MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",SD:"South Dakota",TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming",DC:"District of Columbia"};
+    var sel = document.getElementById("state");
+    states.forEach(function(code) {
+      if (!code) return;
+      var opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = (names[code] || code) + " (" + code + ")";
+      sel.appendChild(opt);
+    });
+  }).catch(function(e) { console.error("Failed to load states:", e); });
+  document.getElementById("prefDate").setAttribute("min", new Date().toISOString().split("T")[0]);
+})();
 </script>
 </body>
 </html>
