@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   nsecToBytes, getPublicKey, getSharedSecret, toHex, fromHex,
-  npubToHex, FHIR_KINDS, STAFF_KINDS, type NostrEvent, buildAndSignEvent
+  npubToHex, npubEncode, FHIR_KINDS, STAFF_KINDS, type NostrEvent, buildAndSignEvent
 } from "../lib/nostr";
 import { nip44Decrypt, nip44Encrypt } from "../lib/nip44";
 import VideoRoom from "../lib/VideoRoom";
@@ -3509,6 +3509,7 @@ export default function PatientPortal() {
   const viewingKeys: PatientKeys = activeChild ? {
     ...keys,
     pkHex: activeChild.childPkHex,
+    npub: npubEncode(fromHex(activeChild.childPkHex)),
     name: activeChild.childName,
     overrideSharedSecret: activeChild.childSharedSecret,
   } : keys;

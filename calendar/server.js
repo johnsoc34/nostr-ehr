@@ -279,6 +279,15 @@ app.post("/api/appointments", (req, res) => {
         video_url: video_url || null,
         is_auto_booked: slotOpen ? 1 : 0,
       });
+      // Intake linkage: if this npub matches a ready intake, mark it scheduled
+      try {
+        const ready = db.getIntakeByStatus('ready');
+        const match = ready.find(i => i.npub === patient_npub);
+        if (match) {
+          db.markIntakeScheduled(match.id);
+          console.log('[calendar] Intake #' + match.id + ' (' + (match.child_name || match.name) + ') -> scheduled');
+        }
+      } catch (e) { console.error('[calendar] intake linkage:', e.message); }
       return res.json({ id: result.lastInsertRowid, status });
     }
 
