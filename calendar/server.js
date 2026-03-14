@@ -266,28 +266,6 @@ app.get("/api/appointments/:id", (req, res) => {
   }
 });
 
-// GET /api/patients/:npub/booking-rules — returns scheduling restrictions
-app.get("/api/patients/:npub/booking-rules", (req, res) => {
-  try {
-    const npub = decodeURIComponent(req.params.npub);
-    const billingModel = db.getPatientBillingModel(npub);
-    const activeCount = db.getActiveAppointmentCount(npub);
-    const isPerVisit = billingModel === "per-visit";
-
-    res.json({
-      billingModel,
-      allowedTypes: isPerVisit ? ["video"] : ["in_person", "phone", "video"],
-      maxActiveAppointments: isPerVisit ? 1 : null, // null = unlimited
-      activeAppointmentCount: activeCount,
-      canBook: isPerVisit ? activeCount < 1 : true,
-      message: isPerVisit && activeCount >= 1
-        ? "You already have an active appointment. Per-visit patients may have one appointment at a time."
-        : null,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 // POST /api/appointments — create appointment (doctor manual or patient self-book)
 app.post("/api/appointments", (req, res) => {
@@ -299,22 +277,6 @@ app.post("/api/appointments", (req, res) => {
     } = req.body;
 
     if (!patient_npub || !patient_name || !date || !start_time || !end_time)
-      return res.status(400).json({ error: "patient_npub, patient_name, date, start_time, end_time required" });
-
-    // Per-visit booking restrictions (skip for doctor-created appointments via force flag)
-    if (!req.body.force) {
-      const billingModel = db.getPatientBillingModel(patient_npub);
-      if (billingModel === "per-visit") {
-        // Video only
-        if (appt_type && appt_type !== "video") {
-          return res.status(403).json({ error: "Per-visit patients may only book video visits." });
-        }
-        // Max 1 active appointment
-        const activeCount = db.getActiveAppointmentCount(patient_npub);
-        if (activeCount >= 1) {
-          return res.status(403).json({ error: "Per-visit patients may have one active appointment at a time." });
-        }
-      }
     }
 
     // Check if slot is available (skip for doctor-created appointments via force flag)
