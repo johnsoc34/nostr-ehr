@@ -14,76 +14,30 @@ const app  = express();
 const PORT = process.env.PORT || 3003;
 
 
-// Licensed states for virtual consultations (Phase 5)
-const LICENSED_STATES = (process.env.LICENSED_STATES || "").split(",").map(s => s.trim().toUpperCase());
 
-// Virtual consultation pipeline env vars
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const RESEND_FROM = process.env.RESEND_FROM || "";
-const PORTAL_URL = process.env.PORTAL_URL || "";
+
 const PRACTICE_NAME = process.env.PRACTICE_NAME || "Immutable Health Pediatrics";
 const PRACTICE_PK = process.env.PRACTICE_PK || "";
-const RELAY_URL_CFG = process.env.RELAY_URL || "";
-const BILLING_API = process.env.BILLING_API || "";
-const CALENDAR_ORIGIN = process.env.CALENDAR_ORIGIN || "";
 
 // Approval email via Resend
-async function sendApprovalEmail(intake, onboardUrl) {
-  if (!RESEND_API_KEY || !intake.email) {
-    console.log("[intake] Skipping email: " + (!RESEND_API_KEY ? "no API key" : "no email address"));
-    return;
-  }
-  try {
-    const html = `
-      <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;background:#0a0d12;color:#e2e8f0;padding:32px;border-radius:12px;">
-        <div style="text-align:center;margin-bottom:24px;">
-          <div style="font-size:24px;font-weight:800;color:#f7931a;">${PRACTICE_NAME}</div>
-          <div style="font-size:13px;color:#6b7fa3;margin-top:4px;">Virtual Consultation</div>
-        </div>
-        <div style="background:#111620;border:1px solid #1e2d44;border-radius:10px;padding:20px;margin-bottom:20px;">
-          <div style="font-size:15px;font-weight:700;color:#22c55e;margin-bottom:8px;">Your consultation request has been approved!</div>
-          <div style="font-size:13px;color:#94a3b8;line-height:1.6;">
-            Hi ${intake.name},<br><br>
-            Your virtual consultation request for <strong style="color:#e2e8f0;">${intake.child_name || "your child"}</strong> has been approved.
-            To get started, you need to set up your secure access code.
-          </div>
-        </div>
-        <div style="text-align:center;margin-bottom:20px;">
-          <a href="${onboardUrl}" style="display:inline-block;padding:14px 32px;background:#f7931a;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">
-            Set Up Your Access Code
-          </a>
-        </div>
-        <div style="font-size:11px;color:#475569;text-align:center;line-height:1.5;">
-          This link is unique to you. Do not share it.<br>
-          If you did not request this, you can safely ignore this email.
-        </div>
-      </div>`;
-    const resp = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + RESEND_API_KEY },
-      body: JSON.stringify({ from: RESEND_FROM, to: intake.email, subject: "Your consultation request has been approved - " + PRACTICE_NAME, html }),
-    });
-    if (resp.ok) console.log("[intake] Approval email sent to " + intake.email);
-    else console.error("[intake] Email failed:", resp.status, await resp.text());
-  } catch (e) { console.error("[intake] Email error:", e.message); }
-}
 
-// Expire stale approved intakes every 6 hours
-setInterval(() => {
-  try {
-    const result = db.expireStaleIntake(14);
-    if (result.changes > 0) console.log("[intake] Expired " + result.changes + " stale intake(s)");
-  } catch (e) { console.error("[intake] Expiration error:", e.message); }
-}, 6 * 60 * 60 * 1000);
 
-app.use(cors({ origin: "*" }));
+app.use(cors({
+  origin: [
+    "https://calendar.immutablehealthpediatrics.com",
+    "https://portal.immutablehealthpediatrics.com",
+    "https://billing.immutablehealthpediatrics.com",
+    "http://localhost:3000",
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 
 // ─── Session auth ─────────────────────────────────────────────────────────────
 const session = require("express-session");
 app.set("trust proxy", 1);
 app.use(session({
-  secret: process.env.CALENDAR_SESSION_SECRET || "imh-cal-secret-change-me",
+  secret: process.env.CALENDAR_SESSION_SECRET || require("crypto").randomBytes(32).toString("hex"),
   resave: false,
   saveUninitialized: false,
   cookie: { secure: true, httpOnly: true, sameSite: "lax", maxAge: 8 * 60 * 60 * 1000 }
@@ -93,8 +47,15 @@ const crypto = require("crypto");
 const CALENDAR_PASSWORD_HASH = process.env.CALENDAR_PASSWORD_HASH || crypto.createHash("sha256").update("changeme").digest("hex");
 
 function requireAuth(req, res, next) {
-  if (req.path.startsWith("/api/") || req.path === "/login" || req.path === "/logout" || req.path === "/request" || req.path.startsWith("/onboard") || req.session.authed) {
+  if (req.path === "/login" || req.path === "/logout") {
     return next();
+  }
+  if (req.session.authed) {
+    return next();
+  }
+  // API routes return 401 JSON, page routes redirect to login
+  if (req.path.startsWith("/api/")) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
   res.redirect("/login");
 }
@@ -379,15 +340,6 @@ app.post("/api/appointments", (req, res) => {
         visit_color: null,
         schedule_comment: null,
       });
-      // Intake linkage: if this npub matches a ready intake, mark it scheduled
-      try {
-        const ready = db.getIntakeByStatus('ready');
-        const match = ready.find(i => i.npub === patient_npub);
-        if (match) {
-          db.markIntakeScheduled(match.id);
-          console.log('[calendar] Intake #' + match.id + ' (' + (match.child_name || match.name) + ') -> scheduled');
-        }
-      } catch (e) { console.error('[calendar] intake linkage:', e.message); }
       return res.json({ id: result.lastInsertRowid, status });
     }
 
@@ -469,243 +421,6 @@ app.post("/api/reminders/send", async (req, res) => {
   }
 });
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-
-
-// Serve the public intake form (no auth — exempted in requireAuth)
-app.get("/request", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "intake-request.html"));
-});
-
-// States endpoint for the intake form
-app.get("/api/intake/states", (req, res) => {
-  res.json({ states: LICENSED_STATES });
-});
-
-// ─── Virtual Visit Intake (Phase 5) ──────────────────────────────────────────
-
-// Public endpoint — no auth required
-app.post("/api/intake", (req, res) => {
-  try {
-    const { name, email, phone, date_of_birth, state, chief_complaint,
-            preferred_date, preferred_time, npub, contact_preference, child_name } = req.body;
-    if (!name || !state)
-      return res.status(400).json({ error: "name and state are required" });
-    const stateUpper = state.trim().toUpperCase();
-    if (!LICENSED_STATES.includes(stateUpper))
-      return res.status(403).json({
-        error: "We are not licensed to provide care in " + stateUpper + ". Licensed states: " + LICENSED_STATES.join(", "),
-      });
-    const result = db.createIntakeRequest({
-      name: name.trim(),
-      email: email?.trim() || null,
-      phone: phone?.trim() || null,
-      date_of_birth: date_of_birth || null,
-      state: stateUpper,
-      chief_complaint: chief_complaint?.trim() || null,
-      preferred_date: preferred_date || null,
-      preferred_time: preferred_time || null,
-      npub: npub?.trim() || null,
-      contact_preference: contact_preference || "email",
-      child_name: child_name?.trim() || null,
-    });
-    console.log("[intake] New request from " + name + " (" + stateUpper + ")" + (npub ? " npub: " + npub.substring(0, 20) + "..." : ""));
-    res.json({ id: result.lastInsertRowid, status: "pending",
-      message: "Your consultation request has been submitted. We will contact you to confirm." });
-  } catch (e) {
-    console.error("[intake] Error:", e.message);
-    res.status(500).json({ error: "Failed to submit request" });
-  }
-});
-
-app.get("/api/intake/pending", (req, res) => {
-  try { res.json(db.getPendingIntake()); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get("/api/intake", (req, res) => {
-  try { res.json(db.getAllIntake(parseInt(req.query.limit) || 50)); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-
-// ─── Virtual Consultation Pipeline Routes ────────────────────────────────────
-
-// GET /api/intake/active — EHR sidebar fetches pending + approved + ready
-// MUST be before /api/intake/:id to avoid Express matching "active" as an ID
-app.get("/api/intake/active", (req, res) => {
-  try {
-    const intakes = db.getIntakeByStatus("pending", "approved", "ready");
-    res.json(intakes);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/intake/:id/npub — patient submits npub after onboarding
-app.post("/api/intake/:id/npub", (req, res) => {
-  try {
-    const { npub } = req.body;
-    if (!npub || !npub.startsWith("npub1")) {
-      return res.status(400).json({ error: "Valid npub required" });
-    }
-    const intake = db.getIntakeById(req.params.id);
-    if (!intake) return res.status(404).json({ error: "Not found" });
-    if (intake.status !== "approved") {
-      return res.status(400).json({ error: "Intake must be in approved state" });
-    }
-    db.updateIntakeNpub(intake.id, npub);
-    console.log("[intake] npub submitted for #" + intake.id + " (" + intake.name + "): " + npub.substring(0, 20) + "...");
-    res.json({ success: true, status: "ready" });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/intake/:id/scheduled — EHR marks intake as scheduled after patient creation
-app.post("/api/intake/:id/scheduled", (req, res) => {
-  try {
-    const result = db.markIntakeScheduled(Number(req.params.id));
-    if (result.changes === 0) return res.status(400).json({ error: "Not in ready state or not found" });
-    console.log("[intake] #" + req.params.id + " -> scheduled");
-    res.json({ success: true, status: "scheduled" });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /onboard/:id — serves onboarding page with injected practice config
-app.get("/onboard/:id", (req, res) => {
-  try {
-    const intake = db.getIntakeById(req.params.id);
-    if (!intake) return res.status(404).send("Not found");
-    if (intake.status !== "approved") {
-      return res.status(400).send("This link is no longer valid. Your request may have already been processed or expired.");
-    }
-    // Read the static onboard.html and inject config
-    const fs = require("fs");
-    let html = fs.readFileSync(path.join(__dirname, "public", "onboard.html"), "utf8");
-    // Inject config as a script tag before </head>
-    const config = JSON.stringify({
-      intakeId: intake.id,
-      parentName: intake.name,
-      childName: intake.child_name || "",
-      practiceName: PRACTICE_NAME,
-      practicePk: PRACTICE_PK,
-      relayUrl: RELAY_URL_CFG,
-      portalUrl: PORTAL_URL,
-      billingApi: BILLING_API,
-      calendarApi: CALENDAR_ORIGIN,
-      npubEndpoint: CALENDAR_ORIGIN + "/api/intake/" + intake.id + "/npub",
-    });
-    html = html.replace('"__INTAKE_ID__"', JSON.stringify(String(intake.id)));
-    html = html.replaceAll("__PORTAL_URL__", PORTAL_URL);
-    html = html.replace('const API_BASE=""', 'const API_BASE=' + JSON.stringify(CALENDAR_ORIGIN));
-    res.send(html);
-  } catch (e) {
-    console.error("[onboard] Error:", e.message);
-    res.status(500).send("Server error");
-  }
-});
-
-app.get("/api/intake/:id", (req, res) => {
-  try {
-    const intake = db.getIntakeById(req.params.id);
-    if (!intake) return res.status(404).json({ error: "Not found" });
-    res.json(intake);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post("/api/intake/:id/approve", (req, res) => {
-  try {
-    const intake = db.getIntakeById(req.params.id);
-    if (!intake) return res.status(404).json({ error: "Not found" });
-    if (intake.status !== "pending") return res.status(400).json({ error: "Already processed" });
-    const { date, start_time, end_time, appt_type } = req.body || {};
-    let appointment_id = null;
-    if (date && start_time && end_time) {
-      const apptResult = db.createAppointment({
-        patient_npub: intake.npub || "pending-intake-" + intake.id,
-        patient_name: intake.name,
-        patient_phone: intake.phone || null,
-        date, start_time, end_time,
-        appt_type: appt_type || "video",
-        status: "confirmed",
-        notes: intake.chief_complaint ? "Chief complaint: " + intake.chief_complaint : null,
-        video_url: null, is_auto_booked: 0, visit_color: null, schedule_comment: null,
-      });
-      appointment_id = apptResult.lastInsertRowid;
-    }
-
-    // Check if this is a returning guardian (already has an npub from a prior intake)
-    const existingNpub = db.findExistingGuardianNpub(intake.email, intake.phone);
-    if (existingNpub) {
-      // Skip onboarding — go straight to ready with existing npub
-      db.updateIntakeStatus(intake.id, "approved", { appointment_id });
-      db.updateIntakeNpub(intake.id, existingNpub);
-      console.log("[intake] Approved #" + intake.id + " (" + intake.name + ") — RETURNING guardian, npub reused: " + existingNpub.substring(0, 20) + "...");
-
-      // Send a simpler notification email (no onboard link needed)
-      if (RESEND_API_KEY && intake.email) {
-        const html = `
-          <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;background:#0a0d12;color:#e2e8f0;padding:32px;border-radius:12px;">
-            <div style="text-align:center;margin-bottom:24px;">
-              <div style="font-size:24px;font-weight:800;color:#f7931a;">${PRACTICE_NAME}</div>
-              <div style="font-size:13px;color:#6b7fa3;margin-top:4px;">Virtual Consultation</div>
-            </div>
-            <div style="background:#111620;border:1px solid #1e2d44;border-radius:10px;padding:20px;margin-bottom:20px;">
-              <div style="font-size:15px;font-weight:700;color:#22c55e;margin-bottom:8px;">Your consultation request has been approved!</div>
-              <div style="font-size:13px;color:#94a3b8;line-height:1.6;">
-                Hi ${intake.name},<br><br>
-                Your virtual consultation request for <strong style="color:#e2e8f0;">${intake.child_name || "your child"}</strong> has been approved.
-                Since you already have an account, you can log in to the patient portal to view your records and schedule your appointment.
-              </div>
-            </div>
-            <div style="text-align:center;margin-bottom:20px;">
-              <a href="${PORTAL_URL}" style="display:inline-block;padding:14px 32px;background:#f7931a;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">
-                Open Patient Portal
-              </a>
-            </div>
-            <div style="font-size:11px;color:#475569;text-align:center;line-height:1.5;">
-              Use your existing access code to log in.
-            </div>
-          </div>`;
-        fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + RESEND_API_KEY },
-          body: JSON.stringify({ from: RESEND_FROM, to: intake.email, subject: "Consultation approved - " + PRACTICE_NAME, html }),
-        }).then(r => { if (r.ok) console.log("[intake] Returning guardian email sent to " + intake.email); })
-          .catch(e => console.error("[intake] Email error:", e.message));
-      }
-
-      return res.json({
-        intake_id: intake.id, appointment_id, status: "ready",
-        returning_guardian: true, npub: existingNpub,
-        message: "Returning guardian — skipped onboarding, went straight to ready."
-      });
-    }
-
-    // New guardian — normal flow: approved → send onboard link
-    db.updateIntakeStatus(intake.id, "approved", { appointment_id });
-    const onboardUrl = CALENDAR_ORIGIN + "/onboard/" + intake.id;
-    console.log("[intake] Approved #" + intake.id + " (" + intake.name + ") onboard: " + onboardUrl);
-    // Send approval email (async, non-blocking)
-    sendApprovalEmail(intake, onboardUrl).catch(e => console.error("[intake] email error:", e.message));
-    res.json({ intake_id: intake.id, appointment_id, status: "approved", onboard_url: onboardUrl });
-  } catch (e) {
-    console.error("[intake] Approve error:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/api/intake/:id/decline", (req, res) => {
-  try {
-    const intake = db.getIntakeById(req.params.id);
-    if (!intake) return res.status(404).json({ error: "Not found" });
-    if (intake.status !== "pending") return res.status(400).json({ error: "Already processed" });
-    db.updateIntakeStatus(intake.id, "declined", { decline_reason: req.body.reason || null });
-    console.log("[intake] Declined #" + intake.id + " (" + intake.name + ")");
-    res.json({ intake_id: intake.id, status: "declined" });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get("/api/licensed-states", (req, res) => {
-  res.json({ states: LICENSED_STATES });
-});
 
 // POST /api/whitelist/sync — regenerate relay whitelist from billing DB + restart relay
 app.post("/api/whitelist/sync", async (req, res) => {
@@ -789,12 +504,3 @@ app.listen(PORT, () => {
 });
 
 // Proxy patients from billing API (avoids browser blocking localhost calls)
-app.get("/api/proxy/patients", async (req, res) => {
-  try {
-    const r = await fetch("http://localhost:3002/api/patients/list");
-    const data = await r.json();
-    res.json(data);
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
-});
