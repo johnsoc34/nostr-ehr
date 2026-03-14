@@ -3244,6 +3244,16 @@ export default function PatientPortal() {
   const [guardianChildren, setGuardianChildren] = useState<GuardianChild[]>([]);
   const [activeChild, setActiveChild] = useState<GuardianChild|null>(null);
   const [showPatientSwitcher, setShowPatientSwitcher] = useState(false);
+  const [billingModel, setBillingModel] = useState<string|null>(null);
+
+  // Fetch billing model for tab visibility (messages hidden for per-visit)
+  useEffect(() => {
+    if (!keys?.npub || !activeConnection?.calendarApi) return;
+    fetch(`${activeConnection.calendarApi}/api/patients/${encodeURIComponent(keys.npub)}/booking-rules`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.billingModel) setBillingModel(data.billingModel); })
+      .catch(() => {});
+  }, [keys?.npub, activeConnection?.calendarApi]);
 
   // PIN auth state
   const [pinCredential, setPinCredential] = useState<StoredCredential | null>(null);
@@ -3568,7 +3578,7 @@ export default function PatientPortal() {
     ["vitals", "📈", "Growth"],
     ["meds", "💊", "Meds"],
     ["immunizations", "💉", "Vaccines"],
-    ["messages", "💬", "Messages"],
+    ...(billingModel !== "per-visit" ? [["messages" as Tab, "💬", "Messages"] as [Tab, string, string]] : []),
     ...(hasCal ? [["appointments" as Tab, "📅", "Schedule"] as [Tab, string, string]] : []),
     ["mydata", "🔑", "My Data"],
   ];
