@@ -4012,10 +4012,17 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
       if(ptTag && ptTag!==patient.id) return;
       if(!ptTag && patientHex && !evPTags.includes(patientHex)) return;
       try{
-        // Practice-side = any pubkey that isn't the patient
-        const fromPractice=ev.pubkey!==patientHex;
+        // Detect guardian message: signed by guardian, tagged with child's pubkey
+        const guardianOfTag=ev.tags.find((t:string[])=>t[0]==="guardian-of")?.[1];
+        const isGuardianMsg=!!guardianOfTag && guardianOfTag===patientHex && ev.pubkey!==patientHex;
+        // Practice-side = any pubkey that isn't the patient AND not a guardian
+        const fromPractice=ev.pubkey!==patientHex && !isGuardianMsg;
         let plain:string|null=null;
-        if(fromPractice){
+        if(isGuardianMsg){
+          // Guardian message: decrypt with getSharedSecret(practiceSk, guardianPk)
+          const guardianSharedX=getSharedSecret(keys.sk,ev.pubkey);
+          try{ plain=await nip44Decrypt(ev.content,guardianSharedX); }catch{}
+        } else if(fromPractice){
           if(patientSharedX){ try{ plain=await nip44Decrypt(ev.content,patientSharedX); }catch{} }
           if(!plain){ try{ plain=await nip44Decrypt(ev.content,sharedX); }catch{} }
         } else if(patientSharedX){
@@ -4031,13 +4038,13 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
           const noReply=ev.tags.some((t:string[])=>t[0]==="no-reply"&&t[1]==="true");
           setMessages(prev=>{
             if(prev.find((m:any)=>m.event.id===ev.id))return prev;
-            return [...prev,{event:ev,text:plain,fromPractice,subject,rootId,noReply}]
+            return [...prev,{event:ev,text:plain,fromPractice,subject,rootId,noReply,isGuardianMsg,guardianPk:isGuardianMsg?ev.pubkey:undefined}]
               .sort((a:any,b:any)=>a.event.created_at-b.event.created_at);
           });
         }
       }catch{}
     };
-
+    
     // Single subscription: all kind 2117 events tagged with the practice pubkey
     // Catches: practice-authored, staff-authored, AND patient-authored (since patients tag practice pk)
     // Direction determined by fromPractice check in process callback
@@ -4219,13 +4226,17 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
             <div style={{flex:1,overflowY:"auto",padding:"14px 12px",display:"flex",flexDirection:"column",gap:12}}>
                 {selectedThread.msgs.map((msg:any,i:number)=>{
                   const fromMe=msg.fromPractice;
+                  const senderLabel=fromMe?"You (Practice)":msg.isGuardianMsg?(() => {
+                    const guardians=loadPatients().filter(p=>p.npub&&npubToHex(p.npub)===msg.guardianPk);
+                    return guardians[0]?.name ? `${guardians[0].name} (Guardian)` : "Guardian";
+                  })():patient.name;
                   return(
                     <div key={msg.event.id} style={{display:"flex",flexDirection:"column",alignItems:fromMe?"flex-end":"flex-start"}}>
                       {/* Sender + timestamp */}
                       <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:4,
                         flexDirection:fromMe?"row-reverse":"row"}}>
-                        <span style={{fontSize:11,fontWeight:600,color:fromMe?"#7dd3fc":"#e2e8f0"}}>
-                          {fromMe?"You (Practice)":patient.name}
+                        <span style={{fontSize:11,fontWeight:600,color:fromMe?"#7dd3fc":msg.isGuardianMsg?"#fbbf24":"#e2e8f0"}}>
+                          {senderLabel}
                         </span>
                         <span style={{fontSize:10,color:"#475569"}}>{fmtDate(msg.event.created_at)}</span>
                       </div>
@@ -8845,7 +8856,7 @@ const CAL_MONTHS_FULL=["January","February","March","April","May","June","July",
 const CAL_DAYS_SHORT=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const CAL_DAYS_FULL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,patientName:string,patientPkHex:string)=>void;onOpenChart?:(patientNpub:string)=>void}){
+function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(apptId:number,patientName:string,patientPkHex:string)=>void;onOpenChart?:(patientNpub:string)=>void;keys:Keypair|null;relay:ReturnType<typeof useRelay>}){
   const [mounted,setMounted]=useState(false);
   useEffect(()=>setMounted(true),[]);
   const todayD=useMemo(()=>{ const d=new Date(); d.setHours(0,0,0,0); return d; },[]);
@@ -9596,6 +9607,7 @@ function CalendarView({onStartVideo,onOpenChart}:{onStartVideo?:(apptId:number,p
                   if(!intakeDetail.npub){alert("No guardian npub — parent hasn't completed onboarding yet.");return;}
                   if(!confirm(`Create patient records for this family?\n\nChild: ${intakeDetail.child_name||"(name needed)"} (DOB: ${intakeDetail.date_of_birth||"unknown"})\nGuardian: ${intakeDetail.name} (npub: ${intakeDetail.npub.substring(0,20)}...)\n\nThis will:\n1. Create child patient record (practice-keyed)\n2. Import guardian by npub\n3. Link guardian → child\n4. Publish guardian grant\n5. Sync both to billing + relay whitelist`))return;
                   try{
+                    if(!keys){alert("Not logged in");return;}
                     // 1. Create child patient (practice-keyed)
                     const childName=intakeDetail.child_name||intakeDetail.name+"'s child";
                     const {patient:childPatient,nsec:childNsec}=addPatient({
@@ -11931,7 +11943,7 @@ export default function Home(){
         )}
 
         {/* Content area — no side padding; PatientChart adds its own except on messages tab */}
-        {view==="schedule"&&!activePatient&&<CalendarView onStartVideo={(id,name,pk)=>setVideoCall({appointmentId:id,patientName:name,patientPkHex:pk})} onOpenChart={(npub)=>{const p=patients.find(pt=>pt.npub===npub);if(p)openPatient(p);}}/>}
+        {view==="schedule"&&!activePatient&&<CalendarView onStartVideo={(id,name,pk)=>setVideoCall({appointmentId:id,patientName:name,patientPkHex:pk})} onOpenChart={(npub)=>{const p=patients.find(pt=>pt.npub===npub);if(p)openPatient(p);}} keys={keys} relay={relay}/>}
         {view==="settings"&&!activePatient&&<SettingsView keys={keys} relay={relay}/>}
         {view==="inbox"&&!activePatient&&keys&&(
           <InboxView

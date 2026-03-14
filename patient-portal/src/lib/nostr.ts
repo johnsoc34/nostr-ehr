@@ -48,7 +48,7 @@ function liftX(x: bigint):Point|null{
   return new Point(x,y%2n===0n?y:P-y);
 }
 async function sha256(b: Uint8Array):Promise<Uint8Array>{
-  return new Uint8Array(await crypto.subtle.digest("SHA-256",b));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256",b.buffer as ArrayBuffer));
 }
 export function toBytes(n: bigint,len=32):Uint8Array{
   const a=new Uint8Array(len);

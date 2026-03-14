@@ -1679,7 +1679,7 @@ function ImmunizationsView({ keys, relay, practicePk, practiceName, T }: { keys:
 }
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
-function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: PatientKeys; relay: ReturnType<typeof useRelay>; practicePk: string; practiceName: string; T: Theme }) {
+function MessagingView({ keys, relay, practicePk, practiceName, T, guardianPkHex }: { keys: PatientKeys; relay: ReturnType<typeof useRelay>; practicePk: string; practiceName: string; T: Theme; guardianPkHex?: string }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [newSubject, setNewSubject] = useState("");
@@ -1716,7 +1716,8 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
       if (seenIds.has(ev.id)) return;
       seenIds.add(ev.id);
       try {
-        const fromPatient = ev.pubkey === keys.pkHex;
+        const guardianOfTag = ev.tags.find((t: string[]) => t[0] === "guardian-of")?.[1];
+        const fromPatient = ev.pubkey === keys.pkHex || (!!guardianPkHex && ev.pubkey === guardianPkHex && guardianOfTag === keys.pkHex);
         let plain: string | null = null;
         if (fromPatient) {
           try { plain = await portalDecrypt(ev.content, keys, practicePk); } catch {}
@@ -1757,7 +1758,8 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
       const rootMsg = messages.find((m: any) => m.event.id === selectedThreadId);
       const baseSubject = rootMsg?.subject || "message";
       const replySubject = baseSubject.startsWith("Re:") ? baseSubject : `Re: ${baseSubject}`;
-      const tags = [["p", practicePk], ["p", keys.pkHex], ["subject", replySubject], ["e", selectedThreadId]];
+      const tags: string[][] = [["p", practicePk], ["p", keys.pkHex], ["subject", replySubject], ["e", selectedThreadId]];
+      if (guardianPkHex) tags.push(["guardian-of", keys.pkHex]);
       const event = await buildAndSignEvent(FHIR_KINDS.Message, encrypted, tags, keys.sk);
       if (await relay.publish(event)) {
         setMessages(m => [...m, {
@@ -1779,7 +1781,8 @@ function MessagingView({ keys, relay, practicePk, practiceName, T }: { keys: Pat
       const subject = newSubject.trim() || "Message from patient";
       
       const encrypted = await portalEncrypt(newMessage.trim(), keys, practicePk);
-      const tags = [["p", practicePk], ["p", keys.pkHex], ["subject", subject]];
+      const tags: string[][] = [["p", practicePk], ["p", keys.pkHex], ["subject", subject]];
+      if (guardianPkHex) tags.push(["guardian-of", keys.pkHex]);
       const event = await buildAndSignEvent(FHIR_KINDS.Message, encrypted, tags, keys.sk);
       if (await relay.publish(event)) {
         const rootId = event.id;
@@ -3659,7 +3662,7 @@ export default function PatientPortal() {
         {tab === "vitals"        && <VitalsView        keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
         {tab === "meds"          && <MedicationsView   keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
         {tab === "immunizations" && <ImmunizationsView keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
-        {tab === "messages"      && <MessagingView     keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
+        {tab === "messages"      && <MessagingView     keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} guardianPkHex={activeChild ? toHex(getPublicKey(keys.sk)) : undefined} />}
         {tab === "appointments"  && <AppointmentsView  keys={viewingKeys} calendarApi={activeConnection.calendarApi} T={T} onJoinVideo={(id:number)=>setVideoCall({appointmentId:id})} />}
         {tab === "mydata"        && <MyDataView        keys={keys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} connections={connections} T={T} />}
       </div>
