@@ -167,6 +167,19 @@ export function addPatientByNpub(p: {
     throw new Error('Invalid npub — could not decode public key');
   }
 
+  // Check if this npub already exists — return existing patient (dedup)
+  const all = loadPatients();
+  const existing = all.find(pt => pt.npub === p.npub.trim());
+  if (existing) {
+    // Update contact info if provided and missing on existing record
+    let changed = false;
+    if (p.phone && !existing.phone) { existing.phone = p.phone; changed = true; }
+    if (p.email && !existing.email) { existing.email = p.email; changed = true; }
+    if (p.state && !existing.state) { existing.state = p.state; changed = true; }
+    if (changed) savePatients(all);
+    return existing;
+  }
+
   const patient: Patient = {
     id: crypto.randomUUID(),
     name: p.name,
@@ -186,7 +199,6 @@ export function addPatientByNpub(p: {
     nsecStored: false,
   };
 
-  const all = loadPatients();
   all.push(patient);
   savePatients(all);
   return patient;

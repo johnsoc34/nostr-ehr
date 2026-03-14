@@ -8992,7 +8992,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
           const gRec=all.find((p:any)=>p.id===guardian.id);
           const cRec=all.find((p:any)=>p.id===childPatient.id);
           if(gRec&&cRec){
-            gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
+            if(!(gRec.guardianOf||[]).includes(childPatient.id)) gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
             cRec.guardianNpub=guardian.npub;
             savePatients(all);
           }
@@ -9702,7 +9702,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                     const gRec=all.find(p=>p.id===guardian.id);
                     const cRec=all.find(p=>p.id===childPatient.id);
                     if(gRec&&cRec){
-                      gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
+                      if(!(gRec.guardianOf||[]).includes(childPatient.id)) gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
                       cRec.guardianNpub=guardian.npub;
                       savePatients(all);
                     }
