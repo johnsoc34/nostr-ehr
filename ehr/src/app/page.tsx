@@ -8955,14 +8955,86 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
   useEffect(()=>{ loadMonth(calMonth); },[calMonth,loadMonth]);
   useEffect(()=>{ loadDay(selectedDate); },[selectedDate,loadDay]);
   const loadIntake=useCallback(async()=>{
-    if(!CAL_API)return;
+    if(!CAL_API)return[];
     try{
       const res=await fetch(`${CAL_API}/api/intake/active`);
       const data=await res.json();
       setIntakeRequests(Array.isArray(data)?data:[]);
-    }catch{ setIntakeRequests([]); }
+      return Array.isArray(data)?data:[];
+    }catch{ setIntakeRequests([]); return []; }
   },[]);
+
+  // Auto-process ready intakes on startup
+  const autoProcessedRef=useRef(false);
+  const autoProcessIntakes=useCallback(async()=>{
+    if(autoProcessedRef.current||!keys||!relay) return;
+    autoProcessedRef.current=true;
+    try{
+      const intakes=await loadIntake();
+      const ready=intakes.filter((i:any)=>i.status==="ready"&&i.npub);
+      if(ready.length===0) return;
+      console.log(`[auto-intake] Processing ${ready.length} ready intake(s)...`);
+      let processed=0;
+      for(const intake of ready){
+        try{
+          const childName=intake.child_name||intake.name+"'s child";
+          const {patient:childPatient}=addPatient({
+            name:childName, dob:intake.date_of_birth||"", sex:"unknown" as const,
+            phone:intake.phone||undefined, state:intake.state||undefined,
+            storeNsec:true, billingModel:"per-visit",
+          });
+          const guardian=addPatientByNpub({
+            name:intake.name, npub:intake.npub,
+            phone:intake.phone||undefined, email:intake.email||undefined,
+            state:intake.state||undefined, billingModel:"per-visit",
+          });
+          const all=loadPatients();
+          const gRec=all.find((p:any)=>p.id===guardian.id);
+          const cRec=all.find((p:any)=>p.id===childPatient.id);
+          if(gRec&&cRec){
+            gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
+            cRec.guardianNpub=guardian.npub;
+            savePatients(all);
+          }
+          publishPatientDemographics(childPatient,keys,relay);
+          publishPatientGrantsForStaff(childPatient,keys,relay);
+          publishPatientGrantForFhirAgent(childPatient,keys,relay);
+          publishPatientDemographics(guardian,keys,relay);
+          publishPatientGrantsForStaff(guardian,keys,relay);
+          publishPatientGrantForFhirAgent(guardian,keys,relay);
+          const guardianPkHex=npubToHex(guardian.npub!);
+          await publishGuardianGrant(childPatient,guardianPkHex,keys,relay);
+          if(BILLING_URL){
+            try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:childPatient.npub,billing_model:'per-visit',name:childPatient.name})});}catch{}
+            try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:guardian.npub,billing_model:'per-visit',name:guardian.name})});}catch{}
+          }
+          try{await fetch(`${CAL_API}/api/intake/${intake.id}/scheduled`,{method:'POST',headers:{'Content-Type':'application/json'}});}catch{}
+          processed++;
+          console.log(`[auto-intake] Created: ${childName} + guardian ${guardian.name}`);
+        }catch(err){
+          console.error(`[auto-intake] Failed for intake #${intake.id}:`,err);
+        }
+      }
+      if(processed>0){
+        try{await fetch(`${CAL_API}/api/whitelist/sync`,{method:'POST'});}catch{}
+        await loadIntake();
+        setPatients(loadPatients());
+        console.log(`[auto-intake] ✅ Processed ${processed}/${ready.length} intake(s)`);
+      }
+    }catch(err){
+      console.error("[auto-intake] Error:",err);
+    }
+  },[keys,relay,loadIntake]);
+
   useEffect(()=>{ loadPending(); loadIntake(); },[loadPending,loadIntake]);
+
+  // Trigger auto-process after initial load when keys are available
+  useEffect(()=>{
+    if(keys&&relay&&!autoProcessedRef.current){
+      const t=setTimeout(()=>autoProcessIntakes(),3000);
+      return ()=>clearTimeout(t);
+    }
+  },[keys,relay,autoProcessIntakes]);
   const approveIntake=async(id:number)=>{
     try{
       const res=await fetch(`${CAL_API}/api/intake/${id}/approve`,{method:"POST",headers:{"Content-Type":"application/json"}});
@@ -9147,7 +9219,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                 onClick={()=>setIntakeDetail(r)}
               >
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
-                  <div style={{fontWeight:600,fontSize:12}}>{r.name}</div>
+                  <div style={{fontWeight:600,fontSize:12}}>{r.child_name||r.name}{r.child_name?<span style={{fontWeight:400,color:CS.muted,fontSize:11}}> ({r.name})</span>:null}</div>
                   <span style={{fontSize:9,fontWeight:700,color:stColor,background:`${stColor}15`,padding:"2px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{r.status}</span>
                 </div>
                 <div style={{color:CS.muted,fontSize:11,lineHeight:1.4}}>
@@ -9529,6 +9601,10 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
+              {intakeDetail.child_name&&<div>
+                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Child</div>
+                <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.child_name}</div>
+              </div>}
               <div>
                 <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Parent/Guardian</div>
                 <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.name}</div>
@@ -9652,7 +9728,18 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                     setIntakeDetail(null);
                     await loadIntake();
                     setPatients(loadPatients());
-                    alert(`✅ Family created!\n\nChild: ${childPatient.name} (practice-keyed)\nGuardian: ${guardian.name} (self-keyed)\n\nGuardian grant published. Both synced to billing.\n\nThe child's access code is stored — you can view it in the child's Portal Access panel.\n\nReminder: run sync-whitelist.sh on the server to update the relay whitelist, or wait for the next cron cycle.`);
+                    // Auto-sync relay whitelist
+                    let whitelistMsg = "";
+                    try {
+                      const wlRes = await fetch(`${CAL_API}/api/whitelist/sync`, { method: "POST" });
+                      if (wlRes.ok) {
+                        const wlData = await wlRes.json();
+                        whitelistMsg = `\n\nRelay whitelist synced (${wlData.pubkeyCount} keys).`;
+                      } else {
+                        whitelistMsg = "\n\n⚠️ Whitelist sync failed — run sync-whitelist.sh manually.";
+                      }
+                    } catch { whitelistMsg = "\n\n⚠️ Could not reach calendar API for whitelist sync."; }
+                    alert(`✅ Family created!\n\nChild: ${childPatient.name} (practice-keyed)\nGuardian: ${guardian.name} (self-keyed)\n\nGuardian grant published. Both synced to billing.${whitelistMsg}\n\nThe child's access code is stored — you can view it in the child's Portal Access panel.`);
                   }catch(err){
                     alert("Error creating family: "+(err instanceof Error?err.message:"unknown"));
                   }

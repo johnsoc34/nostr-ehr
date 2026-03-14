@@ -93,7 +93,7 @@ a:hover{text-decoration:underline}
       <p class="desc">Your child's virtual consultation request has been approved. To access your family's health portal, you'll need a personal access code.</p>
       <div class="info-box">
         <div class="info-title">🔒 How This Works</div>
-        <div class="info-text">Your access code is like a private key to your family's health records. It's generated right here in your browser and <strong>never sent to our server</strong>. You'll use it to log in to the patient portal, where you can view your child's records, send messages to the doctor, and book appointments.</div>
+        <div class="info-text">Your access code is like a private key to your family's health records. It's generated right here in your browser and <strong>never sent to our server</strong>. You'll use it to log in to the patient portal, where you can view your child's records and schedule your video consultation.</div>
       </div>
       <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="generateKeypair()">Generate My Access Code →</button>
       <div class="already-have"><a href="#" onclick="showSkip();return false;">I already have a Nostr identity (nsec) →</a></div>
@@ -143,7 +143,7 @@ a:hover{text-decoration:underline}
       <p class="desc" style="margin-bottom:20px">Your account is connected to Immutable Health Pediatrics. Log in to the patient portal to book your child's virtual consultation.</p>
       <div class="info-box" style="text-align:left">
         <div class="info-title">📋 What to Do Next</div>
-        <div class="info-text">1. Open the Patient Portal below<br/>2. Log in with your access code (nsec)<br/>3. You'll be prompted to set up a PIN or passkey for easier future logins<br/>4. Once the doctor links your child's chart, you'll see their records and can book appointments</div>
+        <div class="info-text">1. Open the Patient Portal below<br/>2. Log in with your access code (nsec)<br/>3. You'll be prompted to set up a PIN or passkey for easier future logins<br/>4. Go to the <strong>Appointments</strong> tab to schedule your video consultation</div>
       </div>
       <div class="conn-string" style="text-align:left">
         <div class="cs-label">Practice Connection (auto-configured)</div>
@@ -186,6 +186,7 @@ async function init(){
     if(intakeData.status==="ready"||intakeData.status==="scheduled"){document.getElementById("loadingState").classList.add("hidden");document.getElementById("alreadyDone").classList.remove("hidden");return}
     if(intakeData.status!=="approved"){showError("This onboarding link is no longer valid. Status: "+intakeData.status);return}
     document.getElementById("patientName").textContent=intakeData.name.split(" ")[0];
+    if(intakeData.child_name){const cd=document.createElement("div");cd.style.cssText="background:#164e6320;border:1px solid #22d3ee40;border-radius:8px;padding:8px 14px;font-size:13px;color:#22d3ee;font-weight:600;margin-bottom:16px;text-align:center";cd.textContent="For: "+intakeData.child_name;document.getElementById("step1").querySelector(".card").insertBefore(cd,document.getElementById("step1").querySelector(".info-box"))}
     document.getElementById("loadingState").classList.add("hidden");document.getElementById("step1").classList.remove("hidden");
   }catch(e){showError("Network error. Please check your connection and try again.")}
 }

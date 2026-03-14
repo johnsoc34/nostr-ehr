@@ -2118,12 +2118,18 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
   const [history, setHistory] = useState<Appt[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Booking rules (per-visit vs monthly restrictions)
+  const [bookingRules, setBookingRules] = useState<{
+    billingModel: string; allowedTypes: string[]; maxActiveAppointments: number|null;
+    activeAppointmentCount: number; canBook: boolean; message: string|null;
+  }|null>(null);
+
   // Booking state
   const [bookMonth, setBookMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
   const [bookDate, setBookDate] = useState<string|null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selSlot, setSelSlot] = useState<{start:string;end:string;isOpen:boolean}|null>(null);
-  const [bookType, setBookType] = useState("in_person");
+  const [bookType, setBookType] = useState("video");
   const [bookPhone, setBookPhone] = useState("");
   const [bookNotes, setBookNotes] = useState("");
   const [bookStep, setBookStep] = useState(1);
@@ -2132,19 +2138,27 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
 
   const npub = keys?.npub;
   const name = keys?.name || "Patient";
+  const isPerVisit = bookingRules?.billingModel === "per-visit";
 
   useEffect(() => {
     if (!npub || !calendarApi) return;
     setLoading(true);
-    fetch(`${calendarApi}/api/appointments/patient/${encodeURIComponent(npub)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (!Array.isArray(data)) { setLoading(false); return; }
+    // Load appointments + booking rules in parallel
+    Promise.all([
+      fetch(`${calendarApi}/api/appointments/patient/${encodeURIComponent(npub)}`).then(r => r.ok ? r.json() : []),
+      fetch(`${calendarApi}/api/patients/${encodeURIComponent(npub)}/booking-rules`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([data, rules]) => {
+      if (Array.isArray(data)) {
         setUpcoming(data.filter((a: Appt) => ["confirmed","pending"].includes(a.status) && a.date >= dateStr(new Date())));
         setHistory(data.filter((a: Appt) => ["cancelled","declined"].includes(a.status) || a.date < dateStr(new Date())));
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+      if (rules) {
+        setBookingRules(rules);
+        // Default to first allowed type
+        if (rules.allowedTypes?.length > 0) setBookType(rules.allowedTypes[0]);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [npub, calendarApi]);
 
   // If no calendar API, show informational message
@@ -2189,7 +2203,7 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
           patient_npub: npub, patient_name: name,
           patient_phone: bookPhone || null, date: bookDate,
           start_time: selSlot.start, end_time: selSlot.end,
-          appt_type: bookType, notes: bookNotes || null,
+          appt_type: isPerVisit ? "video" : bookType, notes: bookNotes || null,
         })
       });
       if (!res.ok) {
@@ -2322,6 +2336,25 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
       {apptTab==="book" && (
         <div>
 
+          {/* Per-visit restriction banner */}
+          {isPerVisit && (
+            <div style={{background:`${T.accent}10`,border:`1px solid ${T.accent}30`,borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:13,color:T.textMuted,lineHeight:1.6}}>
+              <strong style={{color:T.accent}}>Virtual Care</strong> — Video visits only. {bookingRules?.maxActiveAppointments === 1 ? "One appointment at a time." : ""}
+            </div>
+          )}
+
+          {/* Booking limit reached */}
+          {bookingRules && !bookingRules.canBook ? (
+            <div style={{textAlign:"center",padding:48,color:T.textMuted}}>
+              <div style={{fontSize:48,marginBottom:16}}>📋</div>
+              <div style={{fontWeight:700,fontSize:16,color:T.text,marginBottom:8}}>Appointment Limit Reached</div>
+              <div style={{fontSize:13,lineHeight:1.6,maxWidth:360,margin:"0 auto",marginBottom:20}}>
+                {bookingRules.message || "You already have an active appointment. Please complete or cancel it before booking another."}
+              </div>
+              <Btn T={T} solid onClick={() => setApptTab("upcoming")}>View My Appointments</Btn>
+            </div>
+          ) : <>
+
           {bookStep===1 && (
             <div style={card(T)}>
               <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>Select a Date</div>
@@ -2367,11 +2400,18 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
               <div style={card(T)}>
                 <div style={{marginBottom:14}}>
                   <label style={lbl(T)}>Visit Type</label>
-                  <select value={bookType} onChange={e=>setBookType(e.target.value)} style={input(T)}>
-                    <option value="in_person">In Person</option>
-                    <option value="phone">Phone Call</option>
-                    <option value="video">Video Visit</option>
-                  </select>
+                  {isPerVisit ? (
+                    <div style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:T.surfaceHi,fontSize:13,color:T.text}}>
+                      📹 Video Visit
+                      <span style={{fontSize:11,color:T.textMuted,marginLeft:8}}>(virtual care)</span>
+                    </div>
+                  ) : (
+                    <select value={bookType} onChange={e=>setBookType(e.target.value)} style={input(T)}>
+                      <option value="in_person">In Person</option>
+                      <option value="phone">Phone Call</option>
+                      <option value="video">Video Visit</option>
+                    </select>
+                  )}
                 </div>
                 <div style={{marginBottom:14}}>
                   <label style={lbl(T)}>Phone (for reminders)</label>
@@ -2400,6 +2440,7 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
                 ["Time", `${fmtTime(selSlot.start)} – ${fmtTime(selSlot.end)}`],
                 ["Type", typeLabel(bookType)],
                 ["Status", selSlot.isOpen ? "Will auto-confirm" : "Pending approval"],
+                ...(isPerVisit ? [["Plan", "Virtual Care (per-visit)"]] : []),
               ].map(([l,v]) => (
                 <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${T.border}`,fontSize:13}}>
                   <span style={{color:T.textMuted}}>{l}</span>
@@ -2424,6 +2465,8 @@ function AppointmentsView({ keys, calendarApi, T, onJoinVideo }: { keys: Patient
               <Btn T={T} solid onClick={() => { setApptTab("upcoming"); }}>View My Appointments</Btn>
             </div>
           )}
+
+          </>}
         </div>
       )}
 

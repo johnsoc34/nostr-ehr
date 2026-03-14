@@ -286,6 +286,39 @@ function updateVisitTracking(id, data) {
   return getDb().prepare(`UPDATE appointments SET ${fields.join(', ')} WHERE id = @id`).run(values);
 }
 
+// ─── Billing model lookup (reads from shared billing DB) ──────────────────────
+function getPatientBillingModel(npub) {
+  try {
+    const row = getDb().prepare(
+      "SELECT patient_type FROM patients WHERE npub = ?"
+    ).get(npub);
+    return row ? (row.patient_type || "monthly") : "monthly";
+  } catch {
+    // patients table may not exist yet — default to monthly (full access)
+    return "monthly";
+  }
+}
+
+function getActiveAppointmentCount(npub) {
+  const today = new Date().toISOString().split("T")[0];
+  const row = getDb().prepare(
+    `SELECT COUNT(*) as cnt FROM appointments
+     WHERE patient_npub = ? AND status IN ('confirmed','pending') AND date >= ?`
+  ).get(npub, today);
+  return row ? row.cnt : 0;
+}
+
+// ─── Whitelist sync (reads npubs from billing DB, writes relay config) ────────
+function getAllActiveNpubs() {
+  try {
+    return getDb().prepare(
+      "SELECT npub FROM patients WHERE status = 'active' AND npub IS NOT NULL AND npub != ''"
+    ).all().map(r => r.npub);
+  } catch {
+    return [];
+  }
+}
+
 module.exports = {
   getDb,
   getTemplates,
@@ -306,6 +339,9 @@ module.exports = {
   getPendingReminders,
   markReminderSent,
   updateVisitTracking,
+  getPatientBillingModel,
+  getActiveAppointmentCount,
+  getAllActiveNpubs,
 };
 
 // ─── Virtual Visit Intake (Phase 5) ──────────────────────────────────────────
@@ -444,6 +480,25 @@ function markIntakeScheduled(id) {
   ).run(id);
 }
 
+// Find existing npub for a returning guardian (matched by email or phone)
+function findExistingGuardianNpub(email, phone) {
+  const db = getDb();
+  // Check intake_requests for a prior intake with an npub (ready/scheduled status)
+  if (email) {
+    const match = db.prepare(
+      "SELECT npub FROM intake_requests WHERE email = ? AND npub IS NOT NULL AND npub != '' ORDER BY updated_at DESC LIMIT 1"
+    ).get(email);
+    if (match) return match.npub;
+  }
+  if (phone) {
+    const match = db.prepare(
+      "SELECT npub FROM intake_requests WHERE phone = ? AND npub IS NOT NULL AND npub != '' ORDER BY updated_at DESC LIMIT 1"
+    ).get(phone);
+    if (match) return match.npub;
+  }
+  return null;
+}
+
 module.exports = {
   ...module.exports,
   createIntakeRequest,
@@ -455,4 +510,5 @@ module.exports = {
   getIntakeByStatus,
   expireStaleIntake,
   markIntakeScheduled,
+  findExistingGuardianNpub,
 };

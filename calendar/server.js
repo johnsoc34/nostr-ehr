@@ -305,6 +305,29 @@ app.get("/api/appointments/:id", (req, res) => {
   }
 });
 
+// GET /api/patients/:npub/booking-rules — returns scheduling restrictions
+app.get("/api/patients/:npub/booking-rules", (req, res) => {
+  try {
+    const npub = decodeURIComponent(req.params.npub);
+    const billingModel = db.getPatientBillingModel(npub);
+    const activeCount = db.getActiveAppointmentCount(npub);
+    const isPerVisit = billingModel === "per-visit";
+
+    res.json({
+      billingModel,
+      allowedTypes: isPerVisit ? ["video"] : ["in_person", "phone", "video"],
+      maxActiveAppointments: isPerVisit ? 1 : null, // null = unlimited
+      activeAppointmentCount: activeCount,
+      canBook: isPerVisit ? activeCount < 1 : true,
+      message: isPerVisit && activeCount >= 1
+        ? "You already have an active appointment. Per-visit patients may have one appointment at a time."
+        : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/appointments — create appointment (doctor manual or patient self-book)
 app.post("/api/appointments", (req, res) => {
   try {
@@ -316,6 +339,22 @@ app.post("/api/appointments", (req, res) => {
 
     if (!patient_npub || !patient_name || !date || !start_time || !end_time)
       return res.status(400).json({ error: "patient_npub, patient_name, date, start_time, end_time required" });
+
+    // Per-visit booking restrictions (skip for doctor-created appointments via force flag)
+    if (!req.body.force) {
+      const billingModel = db.getPatientBillingModel(patient_npub);
+      if (billingModel === "per-visit") {
+        // Video only
+        if (appt_type && appt_type !== "video") {
+          return res.status(403).json({ error: "Per-visit patients may only book video visits." });
+        }
+        // Max 1 active appointment
+        const activeCount = db.getActiveAppointmentCount(patient_npub);
+        if (activeCount >= 1) {
+          return res.status(403).json({ error: "Per-visit patients may have one active appointment at a time." });
+        }
+      }
+    }
 
     // Check if slot is available (skip for doctor-created appointments via force flag)
     if (!req.body.force) {
@@ -337,6 +376,8 @@ app.post("/api/appointments", (req, res) => {
         notes: notes || null,
         video_url: video_url || null,
         is_auto_booked: slotOpen ? 1 : 0,
+        visit_color: null,
+        schedule_comment: null,
       });
       // Intake linkage: if this npub matches a ready intake, mark it scheduled
       try {
@@ -589,6 +630,56 @@ app.post("/api/intake/:id/approve", (req, res) => {
       });
       appointment_id = apptResult.lastInsertRowid;
     }
+
+    // Check if this is a returning guardian (already has an npub from a prior intake)
+    const existingNpub = db.findExistingGuardianNpub(intake.email, intake.phone);
+    if (existingNpub) {
+      // Skip onboarding — go straight to ready with existing npub
+      db.updateIntakeStatus(intake.id, "approved", { appointment_id });
+      db.updateIntakeNpub(intake.id, existingNpub);
+      console.log("[intake] Approved #" + intake.id + " (" + intake.name + ") — RETURNING guardian, npub reused: " + existingNpub.substring(0, 20) + "...");
+
+      // Send a simpler notification email (no onboard link needed)
+      if (RESEND_API_KEY && intake.email) {
+        const html = `
+          <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;background:#0a0d12;color:#e2e8f0;padding:32px;border-radius:12px;">
+            <div style="text-align:center;margin-bottom:24px;">
+              <div style="font-size:24px;font-weight:800;color:#f7931a;">${PRACTICE_NAME}</div>
+              <div style="font-size:13px;color:#6b7fa3;margin-top:4px;">Virtual Consultation</div>
+            </div>
+            <div style="background:#111620;border:1px solid #1e2d44;border-radius:10px;padding:20px;margin-bottom:20px;">
+              <div style="font-size:15px;font-weight:700;color:#22c55e;margin-bottom:8px;">Your consultation request has been approved!</div>
+              <div style="font-size:13px;color:#94a3b8;line-height:1.6;">
+                Hi ${intake.name},<br><br>
+                Your virtual consultation request for <strong style="color:#e2e8f0;">${intake.child_name || "your child"}</strong> has been approved.
+                Since you already have an account, you can log in to the patient portal to view your records and schedule your appointment.
+              </div>
+            </div>
+            <div style="text-align:center;margin-bottom:20px;">
+              <a href="${PORTAL_URL}" style="display:inline-block;padding:14px 32px;background:#f7931a;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">
+                Open Patient Portal
+              </a>
+            </div>
+            <div style="font-size:11px;color:#475569;text-align:center;line-height:1.5;">
+              Use your existing access code to log in.
+            </div>
+          </div>`;
+        fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + RESEND_API_KEY },
+          body: JSON.stringify({ from: RESEND_FROM, to: intake.email, subject: "Consultation approved - " + PRACTICE_NAME, html }),
+        }).then(r => { if (r.ok) console.log("[intake] Returning guardian email sent to " + intake.email); })
+          .catch(e => console.error("[intake] Email error:", e.message));
+      }
+
+      return res.json({
+        intake_id: intake.id, appointment_id, status: "ready",
+        returning_guardian: true, npub: existingNpub,
+        message: "Returning guardian — skipped onboarding, went straight to ready."
+      });
+    }
+
+    // New guardian — normal flow: approved → send onboard link
     db.updateIntakeStatus(intake.id, "approved", { appointment_id });
     const onboardUrl = CALENDAR_ORIGIN + "/onboard/" + intake.id;
     console.log("[intake] Approved #" + intake.id + " (" + intake.name + ") onboard: " + onboardUrl);
@@ -614,6 +705,81 @@ app.post("/api/intake/:id/decline", (req, res) => {
 
 app.get("/api/licensed-states", (req, res) => {
   res.json({ states: LICENSED_STATES });
+});
+
+// POST /api/whitelist/sync — regenerate relay whitelist from billing DB + restart relay
+app.post("/api/whitelist/sync", async (req, res) => {
+  try {
+    const fs = require("fs");
+    const { execSync } = require("child_process");
+
+    // 1. Read current config.toml
+    const configPath = "/home/nostr/config.toml";
+    let config = fs.readFileSync(configPath, "utf8");
+
+    // 2. Get all active npubs from billing DB
+    const npubs = db.getAllActiveNpubs();
+
+    // 3. Convert npubs to hex pubkeys
+    // npub1... → hex. We need to bech32-decode them.
+    const hexKeys = [];
+    for (const npub of npubs) {
+      try {
+        // bech32 decode npub to hex
+        const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        const data = npub.slice(5); // remove "npub1"
+        const values = [];
+        for (const c of data) {
+          const v = CHARSET.indexOf(c);
+          if (v === -1) continue;
+          values.push(v);
+        }
+        // Convert 5-bit groups to 8-bit
+        let acc = 0, bits = 0;
+        const bytes = [];
+        for (const v of values.slice(0, -6)) { // exclude checksum
+          acc = (acc << 5) | v;
+          bits += 5;
+          while (bits >= 8) {
+            bits -= 8;
+            bytes.push((acc >> bits) & 0xff);
+          }
+        }
+        if (bytes.length === 32) {
+          hexKeys.push(bytes.map(b => b.toString(16).padStart(2, "0")).join(""));
+        }
+      } catch { /* skip invalid npubs */ }
+    }
+
+    // 4. Always include practice pubkey
+    const practicePk = PRACTICE_PK;
+    if (practicePk && !hexKeys.includes(practicePk)) {
+      hexKeys.unshift(practicePk);
+    }
+
+    // 5. Replace pubkey_whitelist in config.toml
+    const whitelist = hexKeys.map(k => `"${k}"`).join(", ");
+    const newLine = `pubkey_whitelist = [${whitelist}]`;
+
+    if (config.match(/^pubkey_whitelist\s*=\s*\[.*\]/m)) {
+      config = config.replace(/^pubkey_whitelist\s*=\s*\[.*\]/m, newLine);
+    } else {
+      // Append to [authorization] section
+      config = config.replace(/\[authorization\]/, `[authorization]\n${newLine}`);
+    }
+
+    // 6. Write config
+    fs.writeFileSync(configPath, config);
+
+    // 7. Restart relay
+    execSync("systemctl restart nostr-relay", { timeout: 10000 });
+
+    console.log(`[whitelist] Synced ${hexKeys.length} pubkeys, relay restarted`);
+    res.json({ success: true, pubkeyCount: hexKeys.length, pubkeys: hexKeys });
+  } catch (e) {
+    console.error("[whitelist] Sync error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(PORT, () => {
