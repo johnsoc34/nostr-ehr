@@ -447,7 +447,7 @@ app.get("/api/intake/states", (req, res) => {
 app.post("/api/intake", (req, res) => {
   try {
     const { name, email, phone, date_of_birth, state, chief_complaint,
-            preferred_date, preferred_time, npub } = req.body;
+            preferred_date, preferred_time, npub, contact_preference, child_name } = req.body;
     if (!name || !state)
       return res.status(400).json({ error: "name and state are required" });
     const stateUpper = state.trim().toUpperCase();
@@ -465,6 +465,8 @@ app.post("/api/intake", (req, res) => {
       preferred_date: preferred_date || null,
       preferred_time: preferred_time || null,
       npub: npub?.trim() || null,
+      contact_preference: contact_preference || "email",
+      child_name: child_name?.trim() || null,
     });
     console.log("[intake] New request from " + name + " (" + stateUpper + ")" + (npub ? " npub: " + npub.substring(0, 20) + "..." : ""));
     res.json({ id: result.lastInsertRowid, status: "pending",
