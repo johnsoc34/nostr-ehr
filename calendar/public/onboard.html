@@ -47,9 +47,6 @@ a:hover{text-decoration:underline}
 .npub-display{background:#111620;border:1px solid #1e2d44;border-radius:8px;padding:12px;margin-top:12px}
 .npub-display .npub-label{font-size:10px;font-weight:600;color:#6b7fa3;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
 .npub-display .npub-value{font-family:'IBM Plex Mono',monospace;font-size:11px;word-break:break-all;color:#94a3b8}
-.conn-string{background:#0c1929;border:1px solid #1e3a5f;border-radius:10px;padding:16px;margin:16px 0}
-.conn-string .cs-label{font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px}
-.conn-string .cs-value{font-family:'IBM Plex Mono',monospace;font-size:11px;word-break:break-all;color:#93c5fd;user-select:all;line-height:1.5}
 .error-msg{background:#3b0a0a;border:1px solid #7f1d1d;border-radius:10px;padding:14px 16px;margin:16px 0;color:#fca5a5;font-size:13px}
 .hidden{display:none!important}
 .already-have{text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid #1e2d44}
@@ -96,7 +93,7 @@ a:hover{text-decoration:underline}
         <div class="info-text">Your access code is like a private key to your family's health records. It's generated right here in your browser and <strong>never sent to our server</strong>. You'll use it to log in to the patient portal, where you can view your child's records and schedule your video consultation.</div>
       </div>
       <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="generateKeypair()">Generate My Access Code →</button>
-      <div class="already-have"><a href="#" onclick="showSkip();return false;">I already have a Nostr identity (nsec) →</a></div>
+      <div class="already-have"><a href="#" onclick="showSkip();return false;">I already have a Nostr identity (npub/nsec) →</a></div>
     </div>
   </div>
   <div id="step1b" class="hidden">
@@ -144,11 +141,6 @@ a:hover{text-decoration:underline}
       <div class="info-box" style="text-align:left">
         <div class="info-title">📋 What to Do Next</div>
         <div class="info-text">1. Open the Patient Portal below<br/>2. Log in with your access code (nsec)<br/>3. You'll be prompted to set up a PIN or passkey for easier future logins<br/>4. Go to the <strong>Appointments</strong> tab to schedule your video consultation</div>
-      </div>
-      <div class="conn-string" style="text-align:left">
-        <div class="cs-label">Practice Connection (auto-configured)</div>
-        <div class="cs-value" id="connStringDisplay"></div>
-        <button class="copy-btn" style="position:relative;top:0;right:0;margin-top:8px" onclick="copyConnString()">Copy</button>
       </div>
       <a id="portalLink" href="__PORTAL_URL__" class="btn btn-primary" style="width:100%;margin-top:12px;text-decoration:none">Open Patient Portal →</a>
       <div style="margin-top:16px;font-size:12px;color:#6b7fa3;line-height:1.5">Bookmark the portal: <a href="__PORTAL_URL__" id="portalUrlText">__PORTAL_URL__</a></div>
@@ -200,7 +192,6 @@ function setStepIndicator(s){["dot1","dot2","dot3"].forEach((id,i)=>{document.ge
 function showSkip(){showStep("1b")}
 function generateKeypair(){try{const kp=generateKeypairRaw();generatedNsec=kp.nsec;generatedNpub=kp.npub;document.getElementById("nsecDisplay").textContent=kp.nsec;document.getElementById("npubDisplay").textContent=kp.npub;showStep(2)}catch(e){alert("Error: "+e.message)}}
 function copyNsec(){navigator.clipboard.writeText(generatedNsec).then(()=>{const b=document.querySelector(".nsec-box .copy-btn");b.textContent="Copied!";setTimeout(()=>b.textContent="Copy",2000)})}
-function copyConnString(){const el=document.getElementById("connStringDisplay");navigator.clipboard.writeText(el.textContent).then(()=>{const b=el.parentElement.querySelector(".copy-btn");b.textContent="Copied!";setTimeout(()=>b.textContent="Copy",2000)})}
 function updateSavedBtn(){const c=document.getElementById("savedCheck").checked;const b=document.getElementById("continueBtn");b.style.opacity=c?"1":"0.4";b.style.pointerEvents=c?"auto":"none"}
 async function submitNpub(){if(generatedNpub)await sendNpubToServer(generatedNpub)}
 async function submitExistingNpub(){const i=document.getElementById("existingNpub").value.trim();const e=document.getElementById("npubError");e.classList.add("hidden");
@@ -209,7 +200,6 @@ async function submitExistingNpub(){const i=document.getElementById("existingNpu
   generatedNpub=i;await sendNpubToServer(i)}
 async function sendNpubToServer(npub){try{const res=await fetch(API_BASE+"/api/intake/"+INTAKE_ID+"/npub",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({npub})});
   if(!res.ok){const d=await res.json().catch(()=>({}));alert("Error: "+(d.error||"Could not save. Please try again."));return}
-  document.getElementById("connStringDisplay").textContent=JSON.stringify({practice_name:PRACTICE_NAME,relay:RELAY_URL,practice_pk:PRACTICE_PK,billing_api:BILLING_API,calendar_api:CALENDAR_API},null,2);
   showStep(3)}catch(e){alert("Network error. Please try again.")}}
 document.addEventListener("DOMContentLoaded",init);
 </script>
