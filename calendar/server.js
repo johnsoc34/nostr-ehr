@@ -93,7 +93,7 @@ const crypto = require("crypto");
 const CALENDAR_PASSWORD_HASH = process.env.CALENDAR_PASSWORD_HASH || crypto.createHash("sha256").update("changeme").digest("hex");
 
 function requireAuth(req, res, next) {
-  if (req.path.startsWith("/api/") || req.path === "/login" || req.path === "/logout" || req.path === "/request" || req.session.authed) {
+  if (req.path.startsWith("/api/") || req.path === "/login" || req.path === "/logout" || req.path === "/request" || req.path.startsWith("/onboard") || req.session.authed) {
     return next();
   }
   res.redirect("/login");
@@ -551,7 +551,9 @@ app.get("/onboard/:id", (req, res) => {
       calendarApi: CALENDAR_ORIGIN,
       npubEndpoint: CALENDAR_ORIGIN + "/api/intake/" + intake.id + "/npub",
     });
-    html = html.replace("</head>", "<script>window.__ONBOARD_CONFIG__=" + config + ";</script></head>");
+    html = html.replace('"__INTAKE_ID__"', JSON.stringify(String(intake.id)));
+    html = html.replaceAll("__PORTAL_URL__", PORTAL_URL);
+    html = html.replace('const API_BASE=""', 'const API_BASE=' + JSON.stringify(CALENDAR_ORIGIN));
     res.send(html);
   } catch (e) {
     console.error("[onboard] Error:", e.message);
