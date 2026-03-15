@@ -1520,7 +1520,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
           address:form.address||undefined, city:form.city||undefined,
           state:form.state||undefined, zip:form.zip||undefined,
           npub:form.npub.trim(),
-          billingModel:form.billingModel,
+          billingModel:form.billingModel as "monthly",
         });
         setCreated(patient);
  
@@ -1541,7 +1541,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
       const { patient, nsec } = addPatient({
         ...form,
         storeNsec: form.storeNsec,
-        billingModel: form.billingModel,
+        billingModel: form.billingModel as "monthly",
       });
       setCreatedNsec(nsec);
       setCreated(patient);
