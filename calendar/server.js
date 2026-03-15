@@ -44,7 +44,8 @@ app.use(session({
 }));
 
 const crypto = require("crypto");
-const CALENDAR_PASSWORD_HASH = process.env.CALENDAR_PASSWORD_HASH || crypto.createHash("sha256").update("changeme").digest("hex");
+const bcrypt = require("bcrypt");
+const CALENDAR_PASSWORD_HASH = process.env.CALENDAR_PASSWORD_HASH || "";
 
 function requireAuth(req, res, next) {
   if (req.path === "/login" || req.path === "/logout") {
@@ -124,11 +125,16 @@ app.get("/login", (req, res) => {
 </html>`);
 });
 
-app.post("/login", express.urlencoded({ extended: false }), (req, res) => {
-  if (crypto.createHash("sha256").update(req.body.password).digest("hex") === CALENDAR_PASSWORD_HASH) {
-    req.session.authed = true;
-    req.session.save(() => res.redirect("/"));
-  } else {
+app.post("/login", express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const match = await bcrypt.compare(req.body.password, CALENDAR_PASSWORD_HASH);
+    if (match) {
+      req.session.authed = true;
+      req.session.save(() => res.redirect("/"));
+    } else {
+      res.redirect("/login?error=1");
+    }
+  } catch {
     res.redirect("/login?error=1");
   }
 });

@@ -5,7 +5,7 @@
  * Reads encrypted clinical events from the practice Nostr relay,
  * decrypts with ECDH-granted shared secrets, and returns standard FHIR R4 responses.
  *
- * Security: Uses a dedicated FHIR reader keypair with ECDH grants (kinds 1013/1012)
+ * Security: Uses a dedicated FHIR reader keypair with ECDH grants (kinds 2101/2100)
  * from the practice key. The practice nsec never touches this server.
  * Falls back to PRACTICE_SK_HEX for migration (deprecated).
  *
@@ -16,6 +16,7 @@
 require("dotenv").config();
 const express = require("express");
 const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const { getSharedSecret, nip44Decrypt, getPublicKey, fromHex, toHex } = require("./lib/crypto");
 const { queryPatientEvents, queryPatientResourceType, queryRelay, FHIR_KINDS, KIND_TO_FHIR } = require("./lib/relay");
 const { normalizeFhirResource, buildBundle, operationOutcome } = require("./lib/fhir-normalize");
@@ -106,7 +107,7 @@ async function bootstrapFromGrants() {
   try {
     // Fetch kind 1013 PracticeKeyGrant events authored by practice, tagged to us
     const grantEvents = await queryRelay(RELAY_URL, {
-      kinds: [1013], // PracticeKeyGrant
+      kinds: [2101], // PracticeKeyGrant
       authors: [practicePkHex],
       limit: 50,
     }, 10000);
@@ -125,7 +126,7 @@ async function bootstrapFromGrants() {
     if (!latestGrant) {
       console.error("[FHIR API] No practice key grant found for this agent.");
       console.error(`[FHIR API] Agent pubkey: ${agentPkHex}`);
-      console.error("[FHIR API] Publish a PracticeKeyGrant (kind 1013) from the EHR Settings → Service Agents.");
+      console.error("[FHIR API] Publish a PracticeKeyGrant (kind 2101) from the EHR Settings → Service Agents.");
       return false;
     }
 
@@ -203,7 +204,7 @@ function requireApiKey(req, res, next) {
 }
 
 // ─── Admin Auth Middleware ──────────────────────────────────────────────────
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Basic ")) {
     res.setHeader("WWW-Authenticate", 'Basic realm="FHIR API Admin"');
@@ -211,11 +212,15 @@ function requireAdmin(req, res, next) {
   }
   const decoded = Buffer.from(auth.slice(6), "base64").toString();
   const [user, pass] = decoded.split(":");
-  const passHash = crypto.createHash("sha256").update(pass).digest("hex");
-  if (user !== "admin" || passHash !== ADMIN_PASSWORD_HASH) {
-    return res.status(403).json({ error: "Invalid admin credentials" });
+  try {
+    const match = await bcrypt.compare(pass, ADMIN_PASSWORD_HASH);
+    if (user !== "admin" || !match) {
+      return res.status(403).json({ error: "Invalid admin credentials" });
+    }
+    next();
+  } catch {
+    return res.status(500).json({ error: "Auth error" });
   }
-  next();
 }
 
 // ─── Helper: Decrypt events and normalize to FHIR ──────────────────────────

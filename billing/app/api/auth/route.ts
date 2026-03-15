@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash, createHmac, randomBytes } from 'crypto';
+import { createHmac } from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const COOKIE_NAME = 'billing_session';
 const SESSION_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
@@ -14,20 +15,6 @@ function signToken(data: string): string {
   return hmac.digest('hex');
 }
 
-export function verifySession(cookieValue: string): boolean {
-  try {
-    const [payload, sig] = cookieValue.split('.');
-    if (!payload || !sig) return false;
-    const expected = signToken(payload);
-    if (sig !== expected) return false;
-    const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
-    if (decoded.exp < Date.now()) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { password } = await req.json();
@@ -35,8 +22,8 @@ export async function POST(req: NextRequest) {
     if (!expected || !password) {
       return NextResponse.json({ ok: false }, { status: 401 });
     }
-    const inputHash = createHash('sha256').update(password).digest('hex');
-    if (inputHash !== expected) {
+    const match = await bcrypt.compare(password, expected);
+    if (!match) {
       return NextResponse.json({ ok: false }, { status: 401 });
     }
     // Create signed session cookie
