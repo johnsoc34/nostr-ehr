@@ -1,6 +1,6 @@
 {
   "name": "nostr-ehr",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "main": "electron/main.js",
   "description": "NostrEHR — Sovereign Pediatric Electronic Health Records",
