@@ -57,6 +57,13 @@ function requireAuth(req, res, next) {
   if (req.path.startsWith("/api/appointments/patient/") || req.path.startsWith("/api/availability/") || (req.path === "/api/appointments" && req.method === "POST")) {
     return next();
   }
+  // EHR calendar view: appointment queries, visit tracking, and management
+  if (req.path === "/api/appointments" && req.method === "GET") {
+    return next();
+  }
+  if (req.path.match(/^\/api\/appointments\/\d+/) && ["GET","PATCH","PUT","DELETE"].includes(req.method)) {
+    return next();
+  }
   if (req.session.authed) {
     return next();
   }
@@ -150,6 +157,39 @@ app.get("/logout", (req, res) => {
   res.redirect("/login");
 });
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─── TURN ephemeral credentials (API key auth, not session) ──────────────────
+const TURN_API_KEY = process.env.TURN_API_KEY || "";
+const TURN_SECRET  = process.env.TURN_SECRET  || "";
+const TURN_HOST    = process.env.TURN_HOST    || "";
+
+app.get("/api/turn-credentials", (req, res) => {
+  // Validate bearer token
+  const auth = req.headers.authorization;
+  if (!TURN_API_KEY || !auth || auth !== `Bearer ${TURN_API_KEY}`) {
+    return res.status(401).json({ error: "Invalid API key" });
+  }
+  if (!TURN_SECRET || !TURN_HOST) {
+    return res.status(503).json({ error: "TURN not configured" });
+  }
+
+  // TURN REST API: time-limited credentials (RFC 5766 / coturn use-auth-secret)
+  const ttl = 86400; // 24 hours
+  const expiry = Math.floor(Date.now() / 1000) + ttl;
+  const username = `${expiry}:nostrehr`;
+  const credential = crypto.createHmac("sha1", TURN_SECRET).update(username).digest("base64");
+
+  res.json({
+    username,
+    credential,
+    ttl,
+    uris: [
+      `turn:${TURN_HOST}:3478`,
+      `turns:${TURN_HOST}:5349`,
+      `turn:${TURN_HOST}:3478?transport=tcp`,
+    ],
+  });
+});
 
 app.use(express.static(path.join(__dirname, "public")));
 
