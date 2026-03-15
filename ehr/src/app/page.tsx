@@ -1497,7 +1497,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
   const [form,setForm]=useState({
     name:"",dob:"",sex:"female" as Patient["sex"],
     phone:"",email:"",address:"",city:"",state:"",zip:"",
-    existingNsec:"",npub:"",billingModel:"monthly" as "monthly"|"per-visit",
+    existingNsec:"",npub:"",billingModel:"monthly",
     storeNsec:false
   });
   const [created,setCreated]=useState<Patient|null>(null);
@@ -1531,14 +1531,6 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         publishPatientGrantForFhirAgent(patient, keys, relay);
  
         // Sync to billing (all patients need a record for relay whitelist)
-        if(patient.npub && BILLING_URL){
-          try{
-            await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
-              method:'POST', headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel,name:patient.name})
-            });
-          }catch(err){ console.error('Failed to sync to billing:',err); }
-        }
       }catch(err){
         setNpubError(err instanceof Error ? err.message : "Invalid npub");
         return;
@@ -1561,14 +1553,6 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
       publishPatientGrantForFhirAgent(patient, keys, relay);
  
       // Sync to billing (all patients need a record for relay whitelist)
-      if(patient.npub && BILLING_URL){
-        try{
-          await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({npub:patient.npub,billing_model:patient.billingModel,name:patient.name})
-          });
-        }catch(err){ console.error('Failed to sync to billing:',err); }
-      }
     }
   };
  
@@ -1579,7 +1563,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Patient Created</div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:13,color:"#e2e8f0",marginBottom:4}}>{created.name}</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>DOB: {created.dob} • {created.billingModel==="monthly"?"Monthly Member":"Per-Visit"}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>DOB: {created.dob} • {"Monthly Member"}</div>
         </div>
         
         <div style={{...S.card,background:"#0f172a",padding:16}}>
@@ -1635,7 +1619,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         <div style={{marginBottom:16}}>
           <div style={{fontSize:13,color:"#e2e8f0",marginBottom:4}}>{created.name}</div>
           <div style={{fontSize:11,color:"#94a3b8"}}>
-            npub: {created.npub?.substring(0,20)}... • {created.billingModel==="monthly"?"Monthly Member":"Per-Visit"}
+            npub: {created.npub?.substring(0,20)}... • {"Monthly Member"}
           </div>
         </div>
  
@@ -1681,22 +1665,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
             transition:"all 0.15s",
           }}>{label}</button>
         ))}
-      </div>
  
-      {/* Billing model selector */}
-      <div style={{marginBottom:12}}>
-        <label style={S.lbl}>Billing Model</label>
-        <div style={{display:"flex",gap:8}}>
-          {([["monthly","Monthly Member"],["per-visit","Per-Visit"]] as const).map(([v,label])=>(
-            <button key={v} onClick={()=>setForm(f=>({...f,billingModel:v}))} style={{
-              flex:1,padding:"7px 12px",fontSize:12,fontWeight:600,borderRadius:6,
-              background:form.billingModel===v?"#164e63":"#0f172a",
-              color:form.billingModel===v?"#22d3ee":"#64748b",
-              border:`1px solid ${form.billingModel===v?"#22d3ee":"#334155"}`,
-              cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s",
-            }}>{label}</button>
-          ))}
-        </div>
       </div>
  
       {/* npub field (existing mode only) */}
@@ -2044,37 +2013,11 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
         <div><label style={S.lbl}>ZIP</label>
           <input value={form.zip||""} onChange={e=>set("zip",e.target.value)} style={S.input}/></div>
       </div>
-      <div style={{marginTop:12}}>
-        <label style={S.lbl}>Billing Model</label>
-        <div style={{display:"flex",gap:8}}>
-          {([["monthly","Monthly Member"],["per-visit","Per-Visit"]] as const).map(([v,label])=>(
-            <button key={v} onClick={()=>setForm(f=>({...f,billingModel:v}))} style={{
-              flex:1,padding:"7px 12px",fontSize:12,fontWeight:600,borderRadius:6,
-              background:form.billingModel===v?"#164e63":"#0f172a",
-              color:form.billingModel===v?"#22d3ee":"#64748b",
-              border:`1px solid ${form.billingModel===v?"#22d3ee":"#334155"}`,
-              cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s",
-            }}>{label}</button>
-          ))}
-        </div>
-      </div>
       <div style={{display:"flex",gap:8,marginTop:14}}>
         <Btn solid col="#0ea5e9" onClick={async()=>{
           updatePatient(form); onUpdated(form); setEditing(false);
           publishPatientDemographics(form, keys, relay);
           // If billing model changed, push to billing API
-          if(form.billingModel!==patient.billingModel && form.npub && BILLING_URL){
-            try{
-              await fetch(`${BILLING_URL}/api/patients/update`,{
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({
-                  patientId: form.id,
-                  patientType: form.billingModel,
-                  monthlyFee: form.billingModel==='per-visit'? 0 : undefined,
-                })
-              });
-            }catch(err){ console.error('Failed to sync billing model:',err); }
-          }
         }}>Save Changes</Btn>
         <Btn col="#475569" onClick={()=>{setForm({...patient});setEditing(false);}}>Cancel</Btn>
       </div>
@@ -7307,7 +7250,7 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
             </div>
           ) : (
             <>
-              {patient.billingModel!=="per-visit"&&<BillingStatusCard patient={patient}/>}
+              <BillingStatusCard patient={patient}/>
               <OverviewTiles patient={patient} keys={keys} relay={relay} onNavigate={t=>{
                 if(t==="demographics"){setShowDemographics(true);}
                 else setTab(t as ChartTab);
@@ -8875,10 +8818,6 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
   const [savingAvail,setSavingAvail]=useState(false);
   const [patients,setPatients]=useState<Patient[]>([]);
 
-  const [intakeRequests,setIntakeRequests]=useState<any[]>([]);
-  const [intakeLoading,setIntakeLoading]=useState(false);
-  const [intakeDetail,setIntakeDetail]=useState<any|null>(null);
-  const [declineReason,setDeclineReason]=useState("");
 
   // Modal state
   const [apptModal,setApptModal]=useState(false);
@@ -8954,102 +8893,11 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
 
   useEffect(()=>{ loadMonth(calMonth); },[calMonth,loadMonth]);
   useEffect(()=>{ loadDay(selectedDate); },[selectedDate,loadDay]);
-  const loadIntake=useCallback(async()=>{
-    if(!CAL_API)return[];
-    try{
-      const res=await fetch(`${CAL_API}/api/intake/active`);
-      const data=await res.json();
-      setIntakeRequests(Array.isArray(data)?data:[]);
-      return Array.isArray(data)?data:[];
-    }catch{ setIntakeRequests([]); return []; }
-  },[]);
 
   // Auto-process ready intakes on startup
-  const autoProcessedRef=useRef(false);
-  const autoProcessIntakes=useCallback(async()=>{
-    if(autoProcessedRef.current||!keys||!relay) return;
-    autoProcessedRef.current=true;
-    try{
-      const intakes=await loadIntake();
-      const ready=intakes.filter((i:any)=>i.status==="ready"&&i.npub);
-      if(ready.length===0) return;
-      console.log(`[auto-intake] Processing ${ready.length} ready intake(s)...`);
-      let processed=0;
-      for(const intake of ready){
-        try{
-          const childName=intake.child_name||intake.name+"'s child";
-          const {patient:childPatient}=addPatient({
-            name:childName, dob:intake.date_of_birth||"", sex:"unknown" as const,
-            phone:intake.phone||undefined, state:intake.state||undefined,
-            storeNsec:true, billingModel:"per-visit",
-          });
-          const guardian=addPatientByNpub({
-            name:intake.name, npub:intake.npub,
-            phone:intake.phone||undefined, email:intake.email||undefined,
-            state:intake.state||undefined, billingModel:"per-visit",
-          });
-          const all=loadPatients();
-          const gRec=all.find((p:any)=>p.id===guardian.id);
-          const cRec=all.find((p:any)=>p.id===childPatient.id);
-          if(gRec&&cRec){
-            if(!(gRec.guardianOf||[]).includes(childPatient.id)) gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
-            cRec.guardianNpub=guardian.npub;
-            savePatients(all);
-          }
-          publishPatientDemographics(childPatient,keys,relay);
-          publishPatientGrantsForStaff(childPatient,keys,relay);
-          publishPatientGrantForFhirAgent(childPatient,keys,relay);
-          publishPatientDemographics(guardian,keys,relay);
-          publishPatientGrantsForStaff(guardian,keys,relay);
-          publishPatientGrantForFhirAgent(guardian,keys,relay);
-          const guardianPkHex=npubToHex(guardian.npub!);
-          await publishGuardianGrant(childPatient,guardianPkHex,keys,relay);
-          if(BILLING_URL){
-            try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:childPatient.npub,billing_model:'per-visit',name:childPatient.name})});}catch{}
-            try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:guardian.npub,billing_model:'per-visit',name:guardian.name})});}catch{}
-          }
-          try{await fetch(`${CAL_API}/api/intake/${intake.id}/scheduled`,{method:'POST',headers:{'Content-Type':'application/json'}});}catch{}
-          processed++;
-          console.log(`[auto-intake] Created: ${childName} + guardian ${guardian.name}`);
-        }catch(err){
-          console.error(`[auto-intake] Failed for intake #${intake.id}:`,err);
-        }
-      }
-      if(processed>0){
-        try{await fetch(`${CAL_API}/api/whitelist/sync`,{method:'POST'});}catch{}
-        await loadIntake();
-        setPatients(loadPatients());
-        console.log(`[auto-intake] ✅ Processed ${processed}/${ready.length} intake(s)`);
-      }
-    }catch(err){
-      console.error("[auto-intake] Error:",err);
-    }
-  },[keys,relay,loadIntake]);
 
-  useEffect(()=>{ loadPending(); loadIntake(); },[loadPending,loadIntake]);
+  useEffect(()=>{ loadPending(); },[loadPending]);
 
-  // Trigger auto-process after initial load when keys are available
-  useEffect(()=>{
-    if(keys&&relay&&!autoProcessedRef.current){
-      const t=setTimeout(()=>autoProcessIntakes(),3000);
-      return ()=>clearTimeout(t);
-    }
-  },[keys,relay,autoProcessIntakes]);
-  const approveIntake=async(id:number)=>{
-    try{
-      const res=await fetch(`${CAL_API}/api/intake/${id}/approve`,{method:"POST",headers:{"Content-Type":"application/json"}});
-      const data=await res.json();
-      if(data.onboard_url){ try{await navigator.clipboard.writeText(data.onboard_url);}catch{} }
-      await loadIntake();
-    }catch(e){ console.error("approve intake failed",e); }
-  };
-  const declineIntake=async(id:number,reason?:string)=>{
-    try{
-      await fetch(`${CAL_API}/api/intake/${id}/decline`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason:reason||null})});
-      setIntakeDetail(null); setDeclineReason("");
-      await loadIntake();
-    }catch(e){ console.error("decline intake failed",e); }
-  };
 
   const selectDate=(d:Date)=>{ setSelectedDate(d); setView("schedule"); };
   const changeMonth=(dir:number)=>setCalMonth(c=>new Date(c.getFullYear(),c.getMonth()+dir,1));
@@ -9203,48 +9051,6 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
             ))}
           </div>
         </div>
-
-        {/* Intake Requests */}
-        {intakeRequests.length>0&&(
-          <div style={{padding:"14px 16px",borderBottom:`1px solid ${CS.border}`}}>
-            <div style={{fontSize:11,color:CS.accent,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-              <span style={{width:7,height:7,borderRadius:"50%",background:CS.accent,boxShadow:`0 0 6px ${CS.accent}`}}/>
-              Virtual Requests ({intakeRequests.length})
-            </div>
-            {intakeRequests.map((r:any)=>{
-              const stColor=r.status==="pending"?CS.accent:r.status==="approved"?CS.amber:r.status==="ready"?CS.green:CS.muted;
-              return(
-              <div key={r.id}
-                style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderLeft:`3px solid ${stColor}`,borderRadius:8,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}
-                onClick={()=>setIntakeDetail(r)}
-              >
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
-                  <div style={{fontWeight:600,fontSize:12}}>{r.child_name||r.name}{r.child_name?<span style={{fontWeight:400,color:CS.muted,fontSize:11}}> ({r.name})</span>:null}</div>
-                  <span style={{fontSize:9,fontWeight:700,color:stColor,background:`${stColor}15`,padding:"2px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{r.status}</span>
-                </div>
-                <div style={{color:CS.muted,fontSize:11,lineHeight:1.4}}>
-                  {r.state}{r.date_of_birth?` · DOB ${r.date_of_birth}`:""}{r.preferred_date?` · Pref ${r.preferred_date}`:""}
-                </div>
-                {r.chief_complaint&&<div style={{color:CS.muted,fontSize:11,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:190}}>
-                  {r.chief_complaint}
-                </div>}
-                {r.status==="pending"&&(
-                  <div style={{display:"flex",gap:6,marginTop:8}}>
-                    <button onClick={e=>{e.stopPropagation();approveIntake(r.id);}} style={{background:"#22c55e20",border:`1px solid ${CS.green}`,color:CS.green,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✓ Approve</button>
-                    <button onClick={e=>{e.stopPropagation();setIntakeDetail(r);}} style={{background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✗ Decline</button>
-                  </div>
-                )}
-                {r.status==="approved"&&(
-                  <div style={{fontSize:11,color:CS.amber,marginTop:6}}>⏳ Awaiting onboarding</div>
-                )}
-                {r.status==="ready"&&(
-                  <div style={{fontSize:11,color:CS.green,marginTop:6}}>✓ Ready — click to create patient</div>
-                )}
-              </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* Pending Approvals */}
         <div style={{padding:"14px 16px",flex:1}}>
@@ -9584,171 +9390,6 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
               <button onClick={()=>openEdit(detailModal.id)} style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,color:CS.text,borderRadius:7,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✏ Edit</button>
               <button onClick={()=>setDetailModal(null)} style={{background:"none",border:`1px solid transparent`,color:CS.muted,borderRadius:7,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Close</button>
             </div>
-          </div>
-        </div>
-      )}
-      {/* Intake Detail / Decline Modal */}
-      {intakeDetail&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>{setIntakeDetail(null);setDeclineReason("");}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:14,padding:28,width:520,maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-              <h3 style={{fontSize:16,fontWeight:800}}>Virtual Consultation Request</h3>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:10,fontWeight:700,color:intakeDetail.status==="pending"?CS.accent:intakeDetail.status==="approved"?CS.amber:intakeDetail.status==="ready"?CS.green:CS.muted,
-                  background:`${(intakeDetail.status==="pending"?CS.accent:intakeDetail.status==="approved"?CS.amber:intakeDetail.status==="ready"?CS.green:CS.muted)}15`,
-                  padding:"3px 10px",borderRadius:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{intakeDetail.status}</span>
-                <button onClick={()=>{setIntakeDetail(null);setDeclineReason("");}} style={{background:"none",border:"none",color:CS.muted,cursor:"pointer",fontSize:18,padding:4}}>✕</button>
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
-              {intakeDetail.child_name&&<div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Child</div>
-                <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.child_name}</div>
-              </div>}
-              <div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Parent/Guardian</div>
-                <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.name}</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>State</div>
-                <div style={{fontSize:14,fontWeight:600}}>{intakeDetail.state}</div>
-              </div>
-              {intakeDetail.phone&&<div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Phone</div>
-                <div style={{fontSize:14}}>{intakeDetail.phone}</div>
-              </div>}
-              {intakeDetail.email&&<div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Email</div>
-                <div style={{fontSize:14}}>{intakeDetail.email}</div>
-              </div>}
-              {intakeDetail.date_of_birth&&<div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Child DOB</div>
-                <div style={{fontSize:14}}>{intakeDetail.date_of_birth}</div>
-              </div>}
-              {intakeDetail.preferred_date&&<div>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Preferred Date</div>
-                <div style={{fontSize:14}}>{intakeDetail.preferred_date}{intakeDetail.preferred_time?` (${intakeDetail.preferred_time})`:""}</div>
-              </div>}
-              {intakeDetail.npub&&<div style={{gridColumn:"1/-1"}}>
-                <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Guardian npub</div>
-                <div style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",wordBreak:"break-all"}}>{intakeDetail.npub}</div>
-              </div>}
-            </div>
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Chief Complaint</div>
-              <div style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,borderRadius:8,padding:"12px 14px",fontSize:13,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
-                {intakeDetail.chief_complaint}
-              </div>
-            </div>
-
-            {/* ── Status-dependent actions ── */}
-            {intakeDetail.status==="pending"&&<>
-              <div style={{fontSize:10,fontWeight:600,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Decline Reason (optional)</div>
-              <textarea value={declineReason} onChange={e=>setDeclineReason(e.target.value)} placeholder="e.g. Outside scope, needs in-person eval..."
-                style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${CS.border}`,background:CS.surfaceHi,color:CS.text,fontSize:13,fontFamily:"inherit",resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box",marginBottom:16}}/>
-              <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-                <button onClick={()=>{declineIntake(intakeDetail.id,declineReason);}}
-                  style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:600,background:"#ef444420",border:`1px solid ${CS.red}`,color:CS.red,cursor:"pointer",fontFamily:"inherit"}}>Decline</button>
-                <button onClick={()=>{approveIntake(intakeDetail.id);setIntakeDetail(null);}}
-                  style={{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:700,background:CS.accent,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>Approve & Send Onboarding Link →</button>
-              </div>
-              <p style={{fontSize:11,color:CS.muted,marginTop:12,lineHeight:1.5}}>
-                Approving sends an onboarding link via {intakeDetail.contact_preference==="text"?"text":"email"}. The parent will generate their access code and connect to the portal.
-              </p>
-            </>}
-
-            {intakeDetail.status==="approved"&&<>
-              <div style={{background:"#78350f20",border:`1px solid ${CS.amber}40`,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:600,color:CS.amber,marginBottom:4}}>⏳ Awaiting Patient Onboarding</div>
-                <div style={{fontSize:12,color:"#fde68a",lineHeight:1.5}}>Onboarding link was sent. Waiting for the parent to generate their access code.</div>
-                <div style={{marginTop:8,fontSize:11}}>
-                  <span style={{color:CS.muted}}>Onboard link: </span>
-                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#94a3b8",wordBreak:"break-all" as const}}>{CAL_API}/onboard/{intakeDetail.id}</span>
-                  <button onClick={()=>{navigator.clipboard.writeText(`${CAL_API}/onboard/${intakeDetail.id}`);}} style={{marginLeft:8,fontSize:10,color:CS.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>Copy</button>
-                </div>
-              </div>
-            </>}
-
-            {intakeDetail.status==="ready"&&<>
-              <div style={{background:"#05291a",border:`1px solid ${CS.green}40`,borderRadius:8,padding:"14px 16px",marginBottom:16}}>
-                <div style={{fontSize:12,fontWeight:600,color:CS.green,marginBottom:6}}>✓ Parent Connected</div>
-                <div style={{fontSize:12,color:"#bbf7d0",lineHeight:1.5,marginBottom:10}}>
-                  The parent has generated their access code and submitted their npub. Click below to create the child's patient record, link the parent as guardian, and publish all grants — in one step.
-                </div>
-                {intakeDetail.npub&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#94a3b8",wordBreak:"break-all" as const,marginBottom:8}}>
-                  Guardian npub: {intakeDetail.npub}
-                  <button onClick={()=>{navigator.clipboard.writeText(intakeDetail.npub);}} style={{marginLeft:8,fontSize:10,color:CS.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>Copy</button>
-                </div>}
-                <button onClick={async()=>{
-                  if(!intakeDetail.npub){alert("No guardian npub — parent hasn't completed onboarding yet.");return;}
-                  if(!confirm(`Create patient records for this family?\n\nChild: ${intakeDetail.child_name||"(name needed)"} (DOB: ${intakeDetail.date_of_birth||"unknown"})\nGuardian: ${intakeDetail.name} (npub: ${intakeDetail.npub.substring(0,20)}...)\n\nThis will:\n1. Create child patient record (practice-keyed)\n2. Import guardian by npub\n3. Link guardian → child\n4. Publish guardian grant\n5. Sync both to billing + relay whitelist`))return;
-                  try{
-                    if(!keys){alert("Not logged in");return;}
-                    // 1. Create child patient (practice-keyed)
-                    const childName=intakeDetail.child_name||intakeDetail.name+"'s child";
-                    const {patient:childPatient,nsec:childNsec}=addPatient({
-                      name:childName, dob:intakeDetail.date_of_birth||"", sex:"unknown" as const,
-                      phone:intakeDetail.phone||undefined, state:intakeDetail.state||undefined,
-                      storeNsec:true, billingModel:"per-visit",
-                    });
-                    // 2. Import guardian by npub
-                    const guardian=addPatientByNpub({
-                      name:intakeDetail.name, npub:intakeDetail.npub,
-                      phone:intakeDetail.phone||undefined, email:intakeDetail.email||undefined,
-                      state:intakeDetail.state||undefined, billingModel:"per-visit",
-                    });
-                    // 3. Link guardian → child
-                    const all=loadPatients();
-                    const gRec=all.find(p=>p.id===guardian.id);
-                    const cRec=all.find(p=>p.id===childPatient.id);
-                    if(gRec&&cRec){
-                      if(!(gRec.guardianOf||[]).includes(childPatient.id)) gRec.guardianOf=[...(gRec.guardianOf||[]),childPatient.id];
-                      cRec.guardianNpub=guardian.npub;
-                      savePatients(all);
-                    }
-                    // 4. Publish demographics + grants for child
-                    publishPatientDemographics(childPatient,keys,relay);
-                    publishPatientGrantsForStaff(childPatient,keys,relay);
-                    publishPatientGrantForFhirAgent(childPatient,keys,relay);
-                    // 5. Publish demographics for guardian
-                    publishPatientDemographics(guardian,keys,relay);
-                    publishPatientGrantsForStaff(guardian,keys,relay);
-                    publishPatientGrantForFhirAgent(guardian,keys,relay);
-                    // 6. Publish guardian grant (kind 2104)
-                    const guardianPkHex=npubToHex(guardian.npub!);
-                    await publishGuardianGrant(childPatient,guardianPkHex,keys,relay);
-                    // 7. Sync both to billing
-                    if(BILLING_URL){
-                      try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:childPatient.npub,billing_model:'per-visit',name:childPatient.name})});}catch{}
-                      try{await fetch(`${BILLING_URL}/api/patients/confirm-ehr-sync`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({npub:guardian.npub,billing_model:'per-visit',name:guardian.name})});}catch{}
-                    }
-                    // 8. Update intake status
-                    try{await fetch(`${CAL_API}/api/intake/${intakeDetail.id}/scheduled`,{method:'POST',headers:{'Content-Type':'application/json'}});}catch{}
-
-                    setIntakeDetail(null);
-                    await loadIntake();
-                    setPatients(loadPatients());
-                    // Auto-sync relay whitelist
-                    let whitelistMsg = "";
-                    try {
-                      const wlRes = await fetch(`${CAL_API}/api/whitelist/sync`, { method: "POST" });
-                      if (wlRes.ok) {
-                        const wlData = await wlRes.json();
-                        whitelistMsg = `\n\nRelay whitelist synced (${wlData.pubkeyCount} keys).`;
-                      } else {
-                        whitelistMsg = "\n\n⚠️ Whitelist sync failed — run sync-whitelist.sh manually.";
-                      }
-                    } catch { whitelistMsg = "\n\n⚠️ Could not reach calendar API for whitelist sync."; }
-                    alert(`✅ Family created!\n\nChild: ${childPatient.name} (practice-keyed)\nGuardian: ${guardian.name} (self-keyed)\n\nGuardian grant published. Both synced to billing.${whitelistMsg}\n\nThe child's access code is stored — you can view it in the child's Portal Access panel.`);
-                  }catch(err){
-                    alert("Error creating family: "+(err instanceof Error?err.message:"unknown"));
-                  }
-                }}
-                style={{width:"100%",padding:"12px 20px",borderRadius:8,fontSize:14,fontWeight:700,background:CS.green,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
-                  Create Child Patient + Link Guardian →
-                </button>
-              </div>
-            </>}
           </div>
         </div>
       )}
