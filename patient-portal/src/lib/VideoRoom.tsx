@@ -1,5 +1,5 @@
 /**
- * VideoRoom component for NostrEHR Telehealth
+ * VideoRoom component for Immutable Health Telehealth
  * 
  * Usage in EHR (page.tsx):
  *   <VideoRoom
@@ -52,6 +52,8 @@ interface VideoRoomProps {
   relay:         RelayHandle;
   remoteName:    string;
   onClose:       () => void;
+  calendarApi?:  string;
+  turnApiKey?:   string;
   // Portal passes T (theme object), EHR uses dark theme by default
   T?: { bg: string; surface: string; surfaceHi: string; border: string; text: string; textMuted: string; accent: string; green: string; red: string; blue: string; amber: string; };
   theme?: "dark" | "light"; // EHR fallback
@@ -128,7 +130,8 @@ function PhoneOffIcon({ size = 22, color = "#fff" }: { size?: number; color?: st
 
 export default function VideoRoom({
   appointmentId, role, sk, localPkHex, remotePkHex,
-  relay, remoteName, onClose, T: themeProp, theme = "dark",
+  relay, remoteName, onClose, calendarApi, turnApiKey,
+  T: themeProp, theme = "dark",
 }: VideoRoomProps) {
   const C = themeProp || (theme === "light" ? THEME_LIGHT : THEME_DARK);
 
@@ -189,7 +192,9 @@ export default function VideoRoom({
           if (cancelled) return;
           setDuration(s);
         },
-      }
+      },
+      calendarApi || "",
+      turnApiKey || "",
     );
 
     sessionRef.current = session;

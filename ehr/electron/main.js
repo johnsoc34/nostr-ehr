@@ -44,9 +44,7 @@ function writeEnvLocal(config) {
     `NEXT_PUBLIC_BILLING_URL=${config.billingUrl || ""}`,
     `NEXT_PUBLIC_CALENDAR_URL=${config.calendarUrl || ""}`,
     `NEXT_PUBLIC_BLOSSOM_URL=${config.blossomUrl || ""}`,
-    `NEXT_PUBLIC_TURN_HOST=${config.turnHost || ""}`,
-    `NEXT_PUBLIC_TURN_USER=${config.turnUser || ""}`,
-    `NEXT_PUBLIC_TURN_CRED=${config.turnCred || ""}`,
+    `NEXT_PUBLIC_TURN_API_KEY=${config.turnApiKey || ""}`,
     `NEXT_PUBLIC_PRACTICE_ADDRESS=${config.practiceAddress || ""}`,
     `NEXT_PUBLIC_PRACTICE_CITY_STATE_ZIP=${config.practiceCityStateZip || ""}`,
     `NEXT_PUBLIC_PRACTICE_PHONE=${config.practicePhone || ""}`,
@@ -191,9 +189,7 @@ function createMainWindow(port) {
       calendarUrl: config.calendarUrl || "",
       portalUrl: config.portalUrl || "",
       blossomUrl: config.blossomUrl || "",
-      turnHost: config.turnHost || "",
-      turnUser: config.turnUser || "",
-      turnCred: config.turnCred || "",
+      turnApiKey: config.turnApiKey || "",
       demoMode: config.demoMode || false,
     });
     mainWindow.webContents.executeJavaScript(`window.__NOSTREHR_CONFIG__ = ${json};`);

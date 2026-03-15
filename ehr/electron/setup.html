@@ -281,7 +281,7 @@
 
       <div class="field">
         <label>Practice Name <span class="req">*</span></label>
-        <input type="text" id="practiceName" placeholder="My Practice Name" />
+        <input type="text" id="practiceName" placeholder="Immutable Health Pediatrics" />
       </div>
     </div>
 
@@ -361,19 +361,9 @@
       <div class="section-label">Telehealth (TURN Relay)</div>
 
       <div class="field">
-        <label>TURN Host <span class="opt">(optional)</span></label>
-        <input type="text" id="turnHost" placeholder="turn.yourpractice.com" />
-      </div>
-
-      <div class="row">
-        <div class="field">
-          <label>TURN Username</label>
-          <input type="text" id="turnUser" placeholder="" />
-        </div>
-        <div class="field">
-          <label>TURN Credential</label>
-          <input type="password" id="turnCred" placeholder="" />
-        </div>
+        <label>TURN API Key <span class="opt">(optional)</span></label>
+        <input type="password" id="turnApiKey" placeholder="turn_ihp_..." />
+        <div style="font-size:11px;color:#6b7fa3;margin-top:4px">Ephemeral TURN credentials are fetched from the Calendar API. Enter the API key configured in the calendar <code>.env</code>.</div>
       </div>
     </div>
 
@@ -457,7 +447,7 @@
   const ALL_FIELDS = [
     "relayUrl", "practicePubkey", "practiceName",
     "portalUrl", "billingUrl", "calendarUrl", "blossomUrl",
-    "turnHost", "turnUser", "turnCred",
+    "turnApiKey",
     "practiceProvider", "practiceAddress", "practiceCityStateZip",
     "practicePhone", "practiceFax",
   ];

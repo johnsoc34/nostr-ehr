@@ -34,6 +34,7 @@ const PRACTICE_NAME = _ec.practiceName || process.env.NEXT_PUBLIC_PRACTICE_NAME 
 const BILLING_URL = _ec.billingUrl || process.env.NEXT_PUBLIC_BILLING_URL || "";
 const CALENDAR_URL = _ec.calendarUrl || process.env.NEXT_PUBLIC_CALENDAR_URL || "";
 const PORTAL_URL = _ec.portalUrl || process.env.NEXT_PUBLIC_PORTAL_URL || "";
+const TURN_API_KEY = _ec.turnApiKey || process.env.NEXT_PUBLIC_TURN_API_KEY || "";
 
 interface Keypair { sk:Uint8Array; pkHex:string; npub:string; nsec:string; }
 interface DecryptedEncounter { event:NostrEvent; fhir:any; note:string; chief:string; }
@@ -11726,6 +11727,8 @@ export default function Home(){
           relay={relay}
           remoteName={videoCall.patientName}
           onClose={() => setVideoCall(null)}
+          calendarApi={CALENDAR_URL}
+          turnApiKey={TURN_API_KEY}
         />
       )}
 

@@ -41,19 +41,38 @@ export const TELEHEALTH_KINDS = {
   CallEnd:      4055,  // call ended (persistent for audit)
 } as const;
 
-// ─── ICE Server Config ───────────────────────────────────────────────────────
-const TURN_HOST = process.env.NEXT_PUBLIC_TURN_HOST || "turn.immutablehealthpediatrics.com";
-const TURN_USER = process.env.NEXT_PUBLIC_TURN_USER || "ihp-telehealth";
-const TURN_CRED = process.env.NEXT_PUBLIC_TURN_CRED || "";
+// ─── ICE Server Config (ephemeral TURN credentials) ─────────────────────────
+const STUN_ONLY: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
 
-export const ICE_SERVERS: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  ...(TURN_CRED ? [
-    { urls: `turn:${TURN_HOST}:3478`, username: TURN_USER, credential: TURN_CRED },
-    { urls: `turns:${TURN_HOST}:5349`, username: TURN_USER, credential: TURN_CRED },
-    { urls: `turn:${TURN_HOST}:3478?transport=tcp`, username: TURN_USER, credential: TURN_CRED },
-  ] : []),
-];
+/**
+ * Fetch short-lived TURN credentials from the calendar API.
+ * Falls back to STUN-only if TURN is not configured or the fetch fails.
+ * Credentials are HMAC-SHA1 ephemeral tokens valid for 24 hours (coturn use-auth-secret).
+ */
+async function fetchIceServers(calendarApi: string, turnApiKey: string): Promise<RTCIceServer[]> {
+  if (!calendarApi || !turnApiKey) return STUN_ONLY;
+  try {
+    const res = await fetch(`${calendarApi}/api/turn-credentials`, {
+      headers: { Authorization: `Bearer ${turnApiKey}` },
+    });
+    if (!res.ok) {
+      console.warn(`[telehealth] TURN credential fetch failed: ${res.status}`);
+      return STUN_ONLY;
+    }
+    const data = await res.json();
+    return [
+      ...STUN_ONLY,
+      ...data.uris.map((uri: string) => ({
+        urls: uri,
+        username: data.username,
+        credential: data.credential,
+      })),
+    ];
+  } catch (e) {
+    console.warn("[telehealth] TURN credential fetch error, falling back to STUN-only:", e);
+    return STUN_ONLY;
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -122,6 +141,8 @@ export class TelehealthSession {
     private remotePkHex:   string,
     private relay:         RelayHandle,
     private callbacks:     TelehealthCallbacks,
+    private calendarApi:   string = "",
+    private turnApiKey:    string = "",
   ) {
     this.sharedX = getSharedSecret(sk, remotePkHex);
   }
@@ -132,25 +153,16 @@ export class TelehealthSession {
   async joinLobby(videoEnabled = true, audioEnabled = true): Promise<MediaStream | null> {
     if (this.destroyed) throw new Error("Session destroyed");
 
-    // Warn if relay isn't connected — events won't publish
-    if (this.relay.status !== "connected") {
-      console.warn(`[Telehealth] joinLobby called but relay status is "${this.relay.status}" — signaling will fail`);
-    }
-
     // Subscribe to signaling FIRST — even if media fails, we need to hear the other party
     this.subscribeToSignaling();
 
     // Publish lobby join BEFORE getUserMedia — so the other party knows we're here
-    const published = await this.publishSignaling(TELEHEALTH_KINDS.Lobby, {
+    await this.publishSignaling(TELEHEALTH_KINDS.Lobby, {
       action: "join",
       role: this.role,
       appointmentId: this.appointmentId,
       timestamp: Date.now(),
     });
-
-    if (!published) {
-      console.warn("[Telehealth] Initial lobby publish failed — relay may not be accepting events from this pubkey");
-    }
 
     this.lobbyState.localJoined = true;
     this.callbacks.onLobbyState({ ...this.lobbyState });
@@ -269,13 +281,6 @@ export class TelehealthSession {
 
   // ─── Signaling (Nostr) ──────────────────────────────────────────────
 
-  // Reverse lookup for logging
-  private static KIND_NAMES: Record<number, string> = Object.fromEntries(
-    Object.entries(TELEHEALTH_KINDS).map(([name, kind]) => [kind, name])
-  );
-
-  private publishFailCount = 0;
-
   private async publishSignaling(kind: number, payload: object): Promise<boolean> {
     const plaintext = JSON.stringify(payload);
     const encrypted = await nip44Encrypt(plaintext, this.sharedX);
@@ -291,21 +296,7 @@ export class TelehealthSession {
     }
 
     const event = await buildAndSignEvent(kind, encrypted, tags, this.sk);
-    const ok = await this.relay.publish(event);
-
-    if (!ok) {
-      const kindName = TelehealthSession.KIND_NAMES[kind] || String(kind);
-      console.warn(`[Telehealth] Publish FAILED: kind=${kindName} (${kind}), relay.status=${this.relay.status}, pubkey=${this.localPkHex.slice(0, 8)}...`);
-      this.publishFailCount++;
-      // Surface error to user after 3 consecutive failures (not just transient blips)
-      if (this.publishFailCount >= 3 && kind === TELEHEALTH_KINDS.Lobby) {
-        this.callbacks.onError("Unable to connect to relay. Your account may not be authorized — contact your practice.");
-      }
-    } else {
-      this.publishFailCount = 0;
-    }
-
-    return ok;
+    return this.relay.publish(event);
   }
 
   private subscribeToSignaling() {
@@ -374,8 +365,9 @@ export class TelehealthSession {
 
   // ─── WebRTC Setup ───────────────────────────────────────────────────
 
-  private createPeerConnection() {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  private async createPeerConnection() {
+    const iceServers = await fetchIceServers(this.calendarApi, this.turnApiKey);
+    const pc = new RTCPeerConnection({ iceServers });
 
     // Add local tracks
     if (this.localStream) {
@@ -472,7 +464,7 @@ export class TelehealthSession {
     if (this.destroyed || this.pc) return;
     this.callbacks.onConnectionStatus("signaling");
 
-    const pc = this.createPeerConnection();
+    const pc = await this.createPeerConnection();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -518,7 +510,7 @@ export class TelehealthSession {
 
     if (this.destroyed) return;
 
-    if (!this.pc) this.createPeerConnection();
+    if (!this.pc) await this.createPeerConnection();
     const pc = this.pc!;
 
     await pc.setRemoteDescription({ type: "offer", sdp: payload.sdp });

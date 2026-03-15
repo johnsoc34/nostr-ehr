@@ -249,6 +249,8 @@ const DEFAULT_CONNECTION: PracticeConnection = {
   addedAt: 0,
 };
 
+const TURN_API_KEY = process.env.NEXT_PUBLIC_TURN_API_KEY || "";
+
 function loadConnections(): PracticeConnection[] {
   try {
     const raw = localStorage.getItem("portal_connections");
@@ -3731,6 +3733,8 @@ export default function PatientPortal() {
           relay={relay}
           remoteName={activeConnection.name}
           onClose={() => setVideoCall(null)}
+          calendarApi={activeConnection.calendarApi || ""}
+          turnApiKey={TURN_API_KEY}
           T={T}
         />
       )}
