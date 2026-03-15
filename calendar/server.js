@@ -277,7 +277,7 @@ app.post("/api/appointments", (req, res) => {
     } = req.body;
 
     if (!patient_npub || !patient_name || !date || !start_time || !end_time)
-    }
+      return res.status(400).json({ error: "patient_npub, patient_name, date, start_time, end_time required" });
 
     // Check if slot is available (skip for doctor-created appointments via force flag)
     if (!req.body.force) {
