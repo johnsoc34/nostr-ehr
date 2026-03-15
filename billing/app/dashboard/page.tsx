@@ -679,7 +679,7 @@ export default function DashboardPage() {
 
   // Load dashboard stats
   useEffect(() => {
-    fetch("/api/stats").then(r => r.json()).then(setStats).catch(() => {});
+    fetch("/api/stats").then(r => { if (r.ok) return r.json(); }).then(d => { if (d) setStats(d); }).catch(() => {});
   }, []);
 
   const nav = [

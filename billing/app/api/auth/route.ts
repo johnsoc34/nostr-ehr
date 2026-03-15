@@ -1,5 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
+
+const COOKIE_NAME = 'billing_session';
+const SESSION_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
+
+function getSecret(): string {
+  return process.env.BILLING_SESSION_SECRET || process.env.DASHBOARD_PASSWORD_HASH || 'fallback-change-me';
+}
+
+function signToken(data: string): string {
+  const hmac = createHmac('sha256', getSecret());
+  hmac.update(data);
+  return hmac.digest('hex');
+}
+
+export function verifySession(cookieValue: string): boolean {
+  try {
+    const [payload, sig] = cookieValue.split('.');
+    if (!payload || !sig) return false;
+    const expected = signToken(payload);
+    if (sig !== expected) return false;
+    const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+    if (decoded.exp < Date.now()) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,10 +36,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false }, { status: 401 });
     }
     const inputHash = createHash('sha256').update(password).digest('hex');
-    if (inputHash === expected) {
-      return NextResponse.json({ ok: true });
+    if (inputHash !== expected) {
+      return NextResponse.json({ ok: false }, { status: 401 });
     }
-    return NextResponse.json({ ok: false }, { status: 401 });
+    // Create signed session cookie
+    const payload = Buffer.from(JSON.stringify({
+      auth: true,
+      exp: Date.now() + SESSION_MAX_AGE * 1000,
+    })).toString('base64');
+    const token = payload + '.' + signToken(payload);
+
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: SESSION_MAX_AGE,
+      path: '/',
+    });
+    return res;
   } catch {
     return NextResponse.json({ ok: false }, { status: 500 });
   }

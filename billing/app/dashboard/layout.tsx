@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
-        sessionStorage.setItem('billing_auth', 'true');
+        sessionStorage.setItem('billing_auth', 'true'); setTimeout(() => window.location.reload(), 200);
         setAuthenticated(true);
       } else {
         setError('Invalid password');
