@@ -27,7 +27,7 @@ ehr/
 
 2. **Setup Wizard:** A 3-step form collects:
    - Step 1: Relay URL, practice pubkey, practice name (required)
-   - Step 2: Portal, billing, calendar, blossom URLs + TURN credentials (optional)
+   - Step 2: Portal, billing, calendar, blossom URLs + TURN API key (optional)
    - Step 3: Practice details for PDF generation (optional)
 
 3. **Config Storage:** Configuration is saved to:
