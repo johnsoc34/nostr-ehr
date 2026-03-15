@@ -247,7 +247,18 @@ Create `.env`:
 ```env
 PORT=3003
 CALENDAR_PASSWORD_HASH=YOUR_BCRYPT_HASH_HERE
+TURN_SECRET=YOUR_COTURN_STATIC_AUTH_SECRET
+TURN_HOST=turn.yourpractice.com
+TURN_API_KEY=YOUR_TURN_API_KEY
 ```
+
+Generate the TURN API key:
+
+```bash
+echo "turn_$(openssl rand -hex 16)"
+```
+
+The `TURN_SECRET` must match `static-auth-secret` in `/etc/turnserver.conf`. The `TURN_API_KEY` is used by the EHR and portal to request ephemeral TURN credentials from the calendar API.
 
 ```bash
 npm install
@@ -427,10 +438,16 @@ certbot --nginx -d fhir.yourpractice.com
 
 ## 10. Coturn (Telehealth TURN Server)
 
-Required for video visits to work across NAT/firewalls.
+Required for video visits to work across NAT/firewalls. Uses ephemeral credentials — the EHR and portal fetch short-lived TURN tokens from the calendar API (see section 6), so no TURN password is ever exposed in browser code.
 
 ```bash
 apt install -y coturn
+```
+
+Generate the shared HMAC secret (used by both coturn and the calendar API):
+
+```bash
+openssl rand -hex 32
 ```
 
 Edit `/etc/turnserver.conf`:
@@ -440,12 +457,13 @@ listening-port=3478
 tls-listening-port=5349
 listening-ip=0.0.0.0
 external-ip=YOUR_SERVER_IP
-realm=turn.yourpractice.com
+realm=yourpractice.com
 server-name=turn.yourpractice.com
 
-# Static credentials (shared with EHR + portal config)
-lt-cred-mech
-user=YOUR_TURN_USERNAME:YOUR_TURN_PASSWORD
+# Ephemeral credentials (HMAC-SHA1, RFC 5766)
+# The calendar API mints 24h credentials using this same secret
+use-auth-secret
+static-auth-secret=YOUR_64CHAR_HEX_SECRET_FROM_ABOVE
 
 # TLS (use your Let's Encrypt certs)
 cert=/etc/letsencrypt/live/turn.yourpractice.com/fullchain.pem
@@ -461,6 +479,8 @@ denied-peer-ip=10.0.0.0-10.255.255.255
 denied-peer-ip=172.16.0.0-172.31.255.255
 denied-peer-ip=192.168.0.0-192.168.255.255
 ```
+
+**IMPORTANT:** Copy the `static-auth-secret` value to the calendar `.env` as `TURN_SECRET`. They must match.
 
 ```bash
 # Get SSL cert for TURN subdomain
@@ -726,6 +746,9 @@ pm2 startup
 - [ ] SSL certs auto-renew (certbot handles this)
 - [ ] No practice nsec stored on server — billing uses `BILLING_AGENT_NSEC`, FHIR API uses `PRACTICE_SK_HEX` (known tradeoff, see below)
 - [ ] Billing agent has kind 2103 ServiceAgentGrant published from EHR
+- [ ] Coturn uses `use-auth-secret` (NOT `lt-cred-mech` with static passwords)
+- [ ] `TURN_SECRET` in calendar `.env` matches `static-auth-secret` in `turnserver.conf`
+- [ ] No `NEXT_PUBLIC_TURN_CRED` or `NEXT_PUBLIC_TURN_USER` in any `.env` file (use `NEXT_PUBLIC_TURN_API_KEY` only)
 
 ---
 
@@ -735,7 +758,7 @@ pm2 startup
 
 **Relay rejects connections:** Check `config.toml` whitelist. The connecting pubkey must be listed. Run `sync-whitelist.sh` after adding patients.
 
-**Telehealth doesn't connect:** Verify coturn is running (`systemctl status coturn`), firewall ports are open, and TURN credentials match between server config and EHR/portal `.env`.
+**Telehealth doesn't connect:** Verify coturn is running (`systemctl status coturn`), firewall ports are open, `TURN_SECRET` in calendar `.env` matches `static-auth-secret` in `turnserver.conf`, and `NEXT_PUBLIC_TURN_API_KEY` is set in the EHR and portal `.env` files. Check browser DevTools Network tab for `GET /api/turn-credentials` — it should return ephemeral credentials.
 
 **Billing invoices not sending:** Check `BILLING_AGENT_NSEC` in billing `.env` (do NOT use practice nsec — use a dedicated agent keypair). The relay must accept kind 1059 from non-whitelisted keys (NIP-17 patch). Verify the agent pubkey is in the relay whitelist and has a kind 2103 ServiceAgentGrant.
 
