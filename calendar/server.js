@@ -48,7 +48,13 @@ const bcrypt = require("bcrypt");
 const CALENDAR_PASSWORD_HASH = process.env.CALENDAR_PASSWORD_HASH || "";
 
 function requireAuth(req, res, next) {
-  if (req.path === "/login" || req.path === "/logout") {
+  // Public routes: login, logout, TURN credentials, and portal-facing patient endpoints
+  if (req.path === "/login" || req.path === "/logout" || req.path === "/api/turn-credentials") {
+    return next();
+  }
+  // Portal reads: patient appointments (scoped by npub) and available slots
+  // Portal writes: create appointment (requires patient_npub in body)
+  if (req.path.startsWith("/api/appointments/patient/") || req.path.startsWith("/api/availability/") || (req.path === "/api/appointments" && req.method === "POST")) {
     return next();
   }
   if (req.session.authed) {
