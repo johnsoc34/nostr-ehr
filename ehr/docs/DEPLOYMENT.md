@@ -194,8 +194,8 @@ Create `.env`:
 ```env
 PORT=3002
 DATABASE_PATH=/var/lib/immutable-health/billing.db
-DASHBOARD_PASSWORD_HASH=YOUR_SHA256_HASH_HERE
-NOSTR_NSEC=nsec1YOUR_PRACTICE_NSEC_HERE
+DASHBOARD_PASSWORD_HASH=YOUR_BCRYPT_HASH_HERE
+BILLING_AGENT_NSEC=nsec1YOUR_BILLING_AGENT_NSEC_HERE
 RELAY_URL=wss://relay.yourpractice.com
 RESEND_API_KEY=re_YOUR_RESEND_KEY
 RESEND_FROM=billing@yourpractice.com
@@ -204,11 +204,21 @@ MONTHLY_FEE_CENTS=15000
 BILLING_URL=https://billing.yourpractice.com
 ```
 
-Generate the password hash:
+Generate the password hash (bcrypt):
 
 ```bash
-echo -n "your_dashboard_password" | sha256sum | cut -d' ' -f1
+node -e "require('bcrypt').hash(process.argv[1], 12).then(h => console.log(h))" "your_dashboard_password"
 ```
+
+**Note:** In Next.js `.env.local` files, escape `$` in bcrypt hashes as `\$`.
+
+Generate a billing agent keypair (this is NOT your practice nsec — it's a dedicated signing key for invoice DMs):
+
+```bash
+node -e "const c=require('crypto'); const sk=c.randomBytes(32); console.log('nsec:', require('nostr-tools').nip19.nsecEncode(sk)); console.log('npub:', require('nostr-tools').nip19.npubEncode(require('nostr-tools').getPublicKey(sk)));"
+```
+
+After enrolling the billing agent, publish a kind 2103 `ServiceAgentGrant` from the EHR to establish the trust chain. Then add the agent's pubkey to the relay whitelist.
 
 Initialize the database:
 
@@ -236,7 +246,7 @@ Create `.env`:
 
 ```env
 PORT=3003
-CALENDAR_PASSWORD_HASH=YOUR_SHA256_HASH_HERE
+CALENDAR_PASSWORD_HASH=YOUR_BCRYPT_HASH_HERE
 ```
 
 ```bash
@@ -297,7 +307,7 @@ PRACTICE_SK_HEX=YOUR_PRACTICE_SECRET_KEY_HEX
 PRACTICE_PK_HEX=YOUR_PRACTICE_PUBKEY_HEX
 RELAY_URL=wss://relay.yourpractice.com
 KEYS_DB_PATH=/var/lib/immutable-health/fhir-keys.db
-ADMIN_PASSWORD_HASH=YOUR_SHA256_HASH_HERE
+ADMIN_PASSWORD_HASH=YOUR_BCRYPT_HASH_HERE
 ALLOWED_ORIGINS=https://billing.yourpractice.com
 ```
 
@@ -714,7 +724,8 @@ pm2 startup
 - [ ] Audit trail accessible only with basic auth
 - [ ] Backups running daily
 - [ ] SSL certs auto-renew (certbot handles this)
-- [ ] No practice nsec stored on server (only in FHIR API `.env` and billing `.env`)
+- [ ] No practice nsec stored on server — billing uses `BILLING_AGENT_NSEC`, FHIR API uses `PRACTICE_SK_HEX` (known tradeoff, see below)
+- [ ] Billing agent has kind 2103 ServiceAgentGrant published from EHR
 
 ---
 
@@ -726,6 +737,6 @@ pm2 startup
 
 **Telehealth doesn't connect:** Verify coturn is running (`systemctl status coturn`), firewall ports are open, and TURN credentials match between server config and EHR/portal `.env`.
 
-**Billing invoices not sending:** Check `NOSTR_NSEC` in billing `.env`. The relay must accept kind 1059 from non-whitelisted keys (NIP-17 patch).
+**Billing invoices not sending:** Check `BILLING_AGENT_NSEC` in billing `.env` (do NOT use practice nsec — use a dedicated agent keypair). The relay must accept kind 1059 from non-whitelisted keys (NIP-17 patch). Verify the agent pubkey is in the relay whitelist and has a kind 2103 ServiceAgentGrant.
 
 **FHIR API returns empty results:** Verify `PRACTICE_SK_HEX` is correct. The API decrypts events using this key — wrong key = no readable data.
