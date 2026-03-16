@@ -259,10 +259,10 @@ const S = {
 function Badge({t,col="#0ea5e9",bg="#0c1a2e"}:{t:string;col?:string;bg?:string}){
   return <span style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:bg,color:col,fontWeight:700,whiteSpace:"nowrap"}}>{t}</span>;
 }
-function Btn({children,onClick,col="#0ea5e9",solid=false,disabled=false,small=false,style={}}:{
-  children:React.ReactNode;onClick?:(e?:any)=>void;col?:string;solid?:boolean;disabled?:boolean;small?:boolean;style?:React.CSSProperties;
+function Btn({children,onClick,col="#0ea5e9",solid=false,disabled=false,small=false,style={},title}:{
+  children:React.ReactNode;onClick?:(e?:any)=>void;col?:string;solid?:boolean;disabled?:boolean;small?:boolean;style?:React.CSSProperties;title?:string;
 }){
-  return <button onClick={onClick} disabled={disabled} style={{
+  return <button onClick={onClick} disabled={disabled} title={title} style={{
     background:solid?`linear-gradient(90deg,${col}cc,${col})`:"transparent",
     border:`1px solid ${col}44`,color:solid?"#fff":col,borderRadius:7,
     padding:small?"4px 10px":"7px 14px",fontSize:small?10:12,cursor:disabled?"not-allowed":"pointer",
@@ -1504,11 +1504,17 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
   const [created,setCreated]=useState<Patient|null>(null);
   const [createdNsec,setCreatedNsec]=useState<string>("");
   const [npubError,setNpubError]=useState("");
+  // Family mode state
+  const [children,setChildren]=useState<{name:string;dob:string;sex:string}[]>([{name:"",dob:"",sex:"female"}]);
+  const [familyCreated,setFamilyCreated]=useState<{parent:Patient;parentNsec:string;children:{patient:Patient;nsec:string}[]}|null>(null);
+  const [familyProgress,setFamilyProgress]=useState("");
   const set=(k:string,v:string)=>setForm(f=>({...f,[k]:v}));
  
   const canSubmit = mode === "new"
     ? form.name.trim() && form.dob
-    : form.name.trim() && form.npub.trim().startsWith("npub1");
+    : mode === "existing"
+    ? form.name.trim() && form.npub.trim().startsWith("npub1")
+    : form.name.trim() && form.dob && children.every(c=>c.name.trim()&&c.dob);
  
   const handleCreate=async()=>{
     if(mode==="existing"){
@@ -1523,19 +1529,87 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
           billingModel:form.billingModel as "monthly",
         });
         setCreated(patient);
- 
-        // Publish demographics to relay (kind 2110)
         publishPatientDemographics(patient, keys, relay);
-        // Publish patient key grants to all active staff
         publishPatientGrantsForStaff(patient, keys, relay);
-        // Auto-grant FHIR reader agent access
         publishPatientGrantForFhirAgent(patient, keys, relay);
- 
-        // Sync to billing (all patients need a record for relay whitelist)
       }catch(err){
         setNpubError(err instanceof Error ? err.message : "Invalid npub");
         return;
       }
+    } else if(mode==="family"){
+      // ── Family batch: parent + N children ──
+      setFamilyProgress("Creating parent...");
+
+      // Create parent (practice-keyed or self-keyed)
+      let parentPatient:Patient;
+      let parentNsec="";
+      if(form.npub.trim().startsWith("npub1")){
+        // Self-keyed parent
+        try{
+          parentPatient=addPatientByNpub({
+            name:form.name, dob:form.dob||undefined, sex:(form.sex as Patient["sex"])||undefined,
+            phone:form.phone||undefined, email:form.email||undefined,
+            address:form.address||undefined, city:form.city||undefined,
+            state:form.state||undefined, zip:form.zip||undefined,
+            npub:form.npub.trim(), billingModel:form.billingModel as "monthly",
+          });
+        }catch(err){
+          setNpubError(err instanceof Error?err.message:"Invalid npub");
+          setFamilyProgress("");return;
+        }
+      }else{
+        const result=addPatient({
+          ...form, storeNsec:form.storeNsec, billingModel:form.billingModel as "monthly",
+        });
+        parentPatient=result.patient;
+        parentNsec=result.nsec;
+      }
+      await publishPatientDemographics(parentPatient,keys,relay);
+      publishPatientGrantsForStaff(parentPatient,keys,relay);
+      publishPatientGrantForFhirAgent(parentPatient,keys,relay);
+
+      // Create each child
+      const createdChildren:{patient:Patient;nsec:string}[]=[];
+      for(let i=0;i<children.length;i++){
+        const c=children[i];
+        setFamilyProgress(`Creating child ${i+1} of ${children.length}: ${c.name}...`);
+        const childResult=addPatient({
+          name:c.name, dob:c.dob, sex:(c.sex as Patient["sex"])||"unknown",
+          phone:undefined, email:undefined,
+          address:form.address||undefined, city:form.city||undefined,
+          state:form.state||undefined, zip:form.zip||undefined,
+          storeNsec:form.storeNsec, billingModel:form.billingModel as "monthly",
+        });
+        createdChildren.push(childResult);
+
+        // Publish demographics
+        await publishPatientDemographics(childResult.patient,keys,relay);
+        publishPatientGrantsForStaff(childResult.patient,keys,relay);
+        publishPatientGrantForFhirAgent(childResult.patient,keys,relay);
+
+        // Link guardian
+        setFamilyProgress(`Linking ${c.name} to ${form.name}...`);
+        const all=loadPatients();
+        const guardian=all.find(p=>p.id===parentPatient.id);
+        const childRec=all.find(p=>p.id===childResult.patient.id);
+        if(guardian&&childRec){
+          const existing=guardian.guardianOf||[];
+          if(!existing.includes(childResult.patient.id)) guardian.guardianOf=[...existing,childResult.patient.id];
+          childRec.guardianNpub=parentPatient.npub;
+          savePatients(all);
+          parentPatient={...parentPatient,guardianOf:guardian.guardianOf};
+        }
+
+        // Publish guardian grant
+        if(parentPatient.npub){
+          const guardianPkHex=npubToHex(parentPatient.npub);
+          await publishGuardianGrant(childResult.patient,guardianPkHex,keys,relay);
+        }
+      }
+
+      setFamilyProgress("");
+      setFamilyCreated({parent:parentPatient,parentNsec,children:createdChildren});
+      return;
     } else {
       // ── Practice-keyed patient: generate or import keypair ──
       const { patient, nsec } = addPatient({
@@ -1545,15 +1619,9 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
       });
       setCreatedNsec(nsec);
       setCreated(patient);
- 
-      // Publish demographics to relay (kind 2110)
       publishPatientDemographics(patient, keys, relay);
-      // Publish patient key grants to all active staff
       publishPatientGrantsForStaff(patient, keys, relay);
-      // Auto-grant FHIR reader agent access
       publishPatientGrantForFhirAgent(patient, keys, relay);
- 
-      // Sync to billing (all patients need a record for relay whitelist)
     }
   };
  
@@ -1651,6 +1719,69 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
     );
   }
  
+  // ── Post-creation card: family batch ──
+  if(familyCreated){
+    const allKeys=[
+      ...(familyCreated.parentNsec?[{name:familyCreated.parent.name,role:"Parent",nsec:familyCreated.parentNsec,npub:familyCreated.parent.npub||""}]:[]),
+      ...familyCreated.children.map(c=>({name:c.patient.name,role:"Child",nsec:c.nsec,npub:c.patient.npub||""})),
+    ];
+    const copyAll=()=>{
+      const lines=allKeys.map(k=>`${k.name} (${k.role})\nnsec: ${k.nsec}\nnpub: ${k.npub}`).join("\n\n");
+      navigator.clipboard.writeText(lines);
+      alert("All keys copied to clipboard");
+    };
+    const selfKeyedParent=familyCreated.parent.keySource==="self";
+    return(
+      <div style={{...S.card,border:"1px solid #166534",background:"#052e16"}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Family Created — {familyCreated.children.length} child{familyCreated.children.length>1?"ren":""}</div>
+
+        {/* Parent */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:13,color:"#e2e8f0",fontWeight:600}}>{familyCreated.parent.name} <span style={{fontSize:10,color:"#64748b"}}>(Parent{selfKeyedParent?" — self-keyed":""})</span></div>
+          {selfKeyedParent?(
+            <div style={{fontSize:10,color:"#7dd3fc",marginTop:4}}>npub: <span style={{fontFamily:"monospace"}}>{familyCreated.parent.npub?.substring(0,24)}...</span></div>
+          ):(
+            <div style={{...S.card,background:"#0f172a",padding:12,marginTop:8}}>
+              <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Parent Access Code</div>
+              <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{familyCreated.parentNsec}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Children */}
+        {familyCreated.children.map((c,i)=>(
+          <div key={c.patient.id} style={{marginBottom:12}}>
+            <div style={{fontSize:12,color:"#e2e8f0",fontWeight:600}}>{c.patient.name} <span style={{fontSize:10,color:"#64748b"}}>(Child • {c.patient.dob})</span></div>
+            <div style={{...S.card,background:"#0f172a",padding:12,marginTop:4}}>
+              <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Access Code</div>
+              <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{c.nsec}</div>
+              <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {c.patient.npub?.substring(0,24)}...</div>
+            </div>
+          </div>
+        ))}
+
+        <div style={{fontSize:10,color:form.storeNsec?"#4ade80":"#f87171",fontStyle:"italic",marginBottom:12}}>
+          {form.storeNsec
+            ? "✓ Access codes stored locally (can be revealed in Portal Access panel)"
+            : "⚠️ These codes are shown once and will NOT be stored. Save them now."}
+        </div>
+
+        <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
+          <Btn solid col="#0ea5e9" onClick={()=>{
+            if(!form.storeNsec && !confirm("Have you saved all access codes? They will not be shown again.")) return;
+            onAdd(familyCreated.parent);
+          }}>Open Parent Chart</Btn>
+          <Btn col="#7c3aed" onClick={copyAll}>📋 Copy All Keys</Btn>
+          <Btn col="#7dd3fc" onClick={()=>{
+            const npubs=allKeys.map(k=>`${k.name}: ${k.npub}`).join("\n");
+            navigator.clipboard.writeText(npubs);
+            alert("All npubs copied — paste into billing system");
+          }}>📋 Copy npubs for Billing</Btn>
+        </div>
+      </div>
+    );
+  }
+
   // ── The form ──
   return(
     <div style={{...S.card,border:"1px solid #1e3a5f"}}>
@@ -1658,7 +1789,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
  
       {/* Mode toggle */}
       <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"1px solid #334155"}}>
-        {([["new","New Patient"],["existing","Existing Nostr Patient"]] as const).map(([m,label])=>(
+        {([["new","New Patient"],["family","New Family"],["existing","Existing Nostr Patient"]] as const).map(([m,label])=>(
           <button key={m} onClick={()=>{setMode(m);setNpubError("");}} style={{
             flex:1,padding:"8px 12px",fontSize:12,fontWeight:600,
             background:mode===m?"#1e3a5f":"#0f172a",color:mode===m?"#7dd3fc":"#64748b",
@@ -1712,7 +1843,11 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         </div>
         <div>
           <label style={S.lbl}>Phone</label>
-          <input value={form.phone} onChange={e=>set("phone",e.target.value)} style={S.input} placeholder="(555) 000-0000"/>
+          <input value={form.phone} onChange={e=>{
+            const digits=e.target.value.replace(/\D/g,"").slice(0,10);
+            const formatted=digits.length>6?`(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`:digits.length>3?`(${digits.slice(0,3)}) ${digits.slice(3)}`:digits.length>0?`(${digits}`:"";
+            set("phone",formatted);
+          }} style={S.input} placeholder="(555) 000-0000"/>
         </div>
       </div>
       <div style={{marginTop:10}}>
@@ -1755,6 +1890,71 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         </div>
       )}
  
+      {/* Parent npub field (family mode — optional, for self-keyed parent) */}
+      {mode==="family"&&(
+        <div style={{marginTop:12,padding:12,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"#7dd3fc",marginBottom:4}}>
+            🔑 Parent's Nostr Key (Optional)
+          </div>
+          <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+            If the parent already has an npub, paste it here. Leave blank to generate new keys.
+          </div>
+          <textarea
+            value={form.npub}
+            onChange={e=>{set("npub",e.target.value);setNpubError("");}}
+            placeholder="npub1... (optional — leave blank to generate)"
+            rows={2}
+            style={{...S.input,resize:"none",fontFamily:"monospace",fontSize:11}}
+          />
+          {npubError&&<div style={{color:"#f87171",fontSize:11,marginTop:6}}>{npubError}</div>}
+        </div>
+      )}
+
+      {/* Children (family mode) */}
+      {mode==="family"&&(
+        <div style={{marginTop:16,padding:12,background:"#0f1a10",border:"1px solid #166534",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"#4ade80",marginBottom:10}}>
+            👶 Children ({children.length})
+          </div>
+          {children.map((c,i)=>(
+            <div key={i} style={{display:"flex",gap:8,alignItems:"end",marginBottom:8}}>
+              <div style={{flex:2}}>
+                {i===0&&<label style={S.lbl}>Name *</label>}
+                <input value={c.name} onChange={e=>{const n=[...children];n[i]={...n[i],name:e.target.value};setChildren(n);}}
+                  style={S.input} placeholder="Last, First"/>
+              </div>
+              <div style={{flex:1}}>
+                {i===0&&<label style={S.lbl}>DOB *</label>}
+                <input type="date" value={c.dob} onChange={e=>{const n=[...children];n[i]={...n[i],dob:e.target.value};setChildren(n);}}
+                  style={S.input}/>
+              </div>
+              <div style={{flex:1}}>
+                {i===0&&<label style={S.lbl}>Sex</label>}
+                <select value={c.sex} onChange={e=>{const n=[...children];n[i]={...n[i],sex:e.target.value};setChildren(n);}}
+                  style={{...S.input,cursor:"pointer"}}>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              {children.length>1&&(
+                <button onClick={()=>setChildren(children.filter((_,j)=>j!==i))} style={{
+                  background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"6px",fontFamily:"inherit"
+                }}>✕</button>
+              )}
+            </div>
+          ))}
+          <button onClick={()=>setChildren([...children,{name:"",dob:"",sex:"female"}])} style={{
+            fontSize:11,color:"#4ade80",background:"none",border:"1px dashed #166534",borderRadius:6,
+            padding:"6px 12px",cursor:"pointer",fontFamily:"inherit",marginTop:4,width:"100%"
+          }}>+ Add Child</button>
+        </div>
+      )}
+
+      {familyProgress&&(
+        <div style={{marginTop:12,fontSize:11,color:"#fbbf24",fontStyle:"italic"}}>{familyProgress}</div>
+      )}
+
       <div style={{marginTop:10}}>
         <label style={S.lbl}>Street Address</label>
         <input value={form.address} onChange={e=>set("address",e.target.value)} style={S.input} placeholder="123 Main St"/>
@@ -1775,7 +1975,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
       </div>
       <div style={{display:"flex",gap:8,marginTop:16}}>
         <Btn solid col="#0ea5e9" disabled={!canSubmit} onClick={handleCreate}>
-          {mode==="new"?"Add Patient":"Add Existing Patient"}
+          {mode==="family"?"Create Family":mode==="new"?"Add Patient":"Add Existing Patient"}
         </Btn>
         <Btn col="#475569" onClick={onCancel}>Cancel</Btn>
       </div>
@@ -2253,7 +2453,7 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
                   navigator.clipboard.writeText(patient.npub||"");
                   alert(`Public key (npub) copied:\n${patient.npub}\n\nUse this for billing system.`);
                 }}>📋 Copy npub</Btn>
-                <Btn small col="#f59e0b" onClick={handleRekey} disabled={!canDo("admin")}>
+                <Btn small col="#f59e0b" onClick={handleRekey} disabled={!canDo("admin")} title="Generate a new keypair for this patient. Re-encrypts all their events with the new key and updates the relay whitelist.">
                   🔄 Re-key patient
                 </Btn>
                 {!canDo("admin")&&<span style={{fontSize:10,color:"#64748b"}}>Doctor only</span>}
@@ -2372,7 +2572,7 @@ function GuardianSection({patient,onUpdated,keys,relay}:{patient:Patient;onUpdat
                   {canDo("admin")&&<button onClick={()=>handleUnlinkChild(child.id)} style={{fontSize:10,color:"#ef4444",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>✕</button>}
                 </div>
               ))}
-              {canDo("admin")&&<button onClick={()=>republishGrants()} disabled={publishing} style={{fontSize:10,color:"#6b7fa3",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:4}}>{publishing?"Publishing...":"↻ Republish all guardian grants"}</button>}
+              {canDo("admin")&&<button onClick={()=>republishGrants()} disabled={publishing} title="Re-publish ECDH guardian grants so this parent can decrypt their children's records. Use after a child re-key." style={{fontSize:10,color:"#6b7fa3",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:4}}>{publishing?"Publishing...":"↻ Republish all guardian grants"}</button>}
             </div>
           )}
           {childGuardians.length>0&&(
@@ -8043,7 +8243,7 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
                 </div>
               ):(
                 <div style={{display:"flex",gap:4}}>
-                  <Btn small col="#0ea5e9" disabled={republishing===s.pkHex} onClick={async()=>{
+                  <Btn small col="#0ea5e9" title="Re-publish decryption grants for all patients to this staff member. Use after adding new patients, or if this staff member can't decrypt a chart." disabled={republishing===s.pkHex} onClick={async()=>{
                     setRepublishing(s.pkHex);
                     try{
                       const granted=await publishPatientGrants(s.pkHex);
@@ -8051,7 +8251,7 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
                     }catch(e){alert("Failed: "+e);}
                     finally{setRepublishing(null);}
                   }}>{republishing===s.pkHex?"⏳":"🔄"} Grants</Btn>
-                  <Btn small col="#ef4444" onClick={()=>setRevokeConfirm(s.pkHex)}>Revoke</Btn>
+                  <Btn small col="#ef4444" title="Revoke this staff member's access — deletes their key grants from the relay" onClick={()=>setRevokeConfirm(s.pkHex)}>Revoke</Btn>
                 </div>
               )}
             </div>
@@ -8342,6 +8542,7 @@ function ServiceAgentsManager({ keys, relay }: {
                   </div>
                   {a.service === "fhir-reader" && (
                     <Btn small col="#0ea5e9" disabled={republishing === a.service}
+                      title="Re-publish the service agent grant and all patient decryption keys. Use after adding new patients or if the FHIR API returns decryption errors."
                       onClick={() => handleRepublish(a)}>
                       {republishing === a.service ? "⏳" : "🔄"} Grants
                     </Btn>

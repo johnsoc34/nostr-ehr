@@ -1681,7 +1681,7 @@ function ImmunizationsView({ keys, relay, practicePk, practiceName, T }: { keys:
 }
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
-function MessagingView({ keys, relay, practicePk, practiceName, T, guardianPkHex }: { keys: PatientKeys; relay: ReturnType<typeof useRelay>; practicePk: string; practiceName: string; T: Theme; guardianPkHex?: string }) {
+function MessagingView({ keys, relay, practicePk, practiceName, T, guardianPkHex, childPatientId }: { keys: PatientKeys; relay: ReturnType<typeof useRelay>; practicePk: string; practiceName: string; T: Theme; guardianPkHex?: string; childPatientId?: string }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [newSubject, setNewSubject] = useState("");
@@ -1711,6 +1711,7 @@ function MessagingView({ keys, relay, practicePk, practiceName, T, guardianPkHex
     setLoading(true);
     
     const seenIds = new Set<string>();
+    const childThreadRoots = new Set<string>();
     let loadingDone = false;
     const finishLoading = () => { if (!loadingDone) { loadingDone = true; setLoading(false); } };
 
@@ -1720,8 +1721,16 @@ function MessagingView({ keys, relay, practicePk, practiceName, T, guardianPkHex
       try {
         const guardianOfTag = ev.tags.find((t: string[]) => t[0] === "guardian-of")?.[1];
         const fromPatient = ev.pubkey === keys.pkHex || (!!guardianPkHex && ev.pubkey === guardianPkHex && guardianOfTag === keys.pkHex);
+        const isGuardianThread = !!guardianOfTag || (!!guardianPkHex && ev.tags.some((t: string[]) => t[0] === "p" && t[1] === guardianPkHex));
         let plain: string | null = null;
-        if (fromPatient) {
+        if (isGuardianThread && guardianPkHex) {
+          const guardianKeys = { ...keys, overrideSharedSecret: undefined };
+          try { plain = await portalDecrypt(ev.content, guardianKeys, practicePk); } catch {}
+          if (!plain) {
+            const patientContent = ev.tags.find((t: string[]) => t[0] === "patient-content")?.[1];
+            if (patientContent) { try { plain = await portalDecrypt(patientContent, guardianKeys, practicePk); } catch {} }
+          }
+        } else if (fromPatient) {
           try { plain = await portalDecrypt(ev.content, keys, practicePk); } catch {}
         } else {
           const patientContent = ev.tags.find((t: string[]) => t[0] === "patient-content")?.[1];
@@ -1729,9 +1738,19 @@ function MessagingView({ keys, relay, practicePk, practiceName, T, guardianPkHex
           if (!plain) { try { plain = await portalDecrypt(ev.content, keys, practicePk); } catch {} }
         }
         if (plain) {
+          const ptTag = ev.tags?.find((t: string[]) => t[0] === "pt")?.[1];
+          const replyRef = ev.tags?.find((t: string[]) => t[0] === "e")?.[1];
+          if (guardianPkHex) {
+            const isChildGuardianMsg = guardianOfTag === keys.pkHex;
+            const isReplyInChildThread = !guardianOfTag && replyRef && childThreadRoots.has(replyRef);
+            if (!isChildGuardianMsg && !isReplyInChildThread) { return; }
+            if (isChildGuardianMsg && !replyRef) { childThreadRoots.add(ev.id); }
+          } else {
+            if (guardianOfTag) { return; }
+            if (ptTag && ev.pubkey !== keys.pkHex) { return; }
+          }
           const subject = ev.tags?.find((t: string[]) => t[0] === "subject")?.[1] || "(no subject)";
-          const eTag = ev.tags?.find((t: string[]) => t[0] === "e")?.[1];
-          const rootId = eTag || ev.id;
+          const rootId = replyRef || ev.id;
           const noReply = ev.tags?.some((t: string[]) => t[0] === "no-reply" && t[1] === "true") || false;
           setMessages(prev => {
             if (prev.find((m: any) => m.event.id === ev.id)) return prev;
@@ -3664,7 +3683,7 @@ export default function PatientPortal() {
         {tab === "vitals"        && <VitalsView        keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
         {tab === "meds"          && <MedicationsView   keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} T={T} />}
         {tab === "immunizations" && <ImmunizationsView keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} />}
-        {tab === "messages"      && <MessagingView     keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} guardianPkHex={activeChild ? toHex(getPublicKey(keys.sk)) : undefined} />}
+        {tab === "messages"      && <MessagingView     key={activeChild?.childPatientId || "self"} keys={viewingKeys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} T={T} guardianPkHex={activeChild ? toHex(getPublicKey(keys.sk)) : undefined} childPatientId={activeChild?.childPatientId} />}
         {tab === "appointments"  && <AppointmentsView  keys={viewingKeys} calendarApi={activeConnection.calendarApi} T={T} onJoinVideo={(id:number)=>setVideoCall({appointmentId:id})} />}
         {tab === "mydata"        && <MyDataView        keys={keys} relay={relay} practicePk={activeConnection.practicePk} practiceName={activeConnection.name} connections={connections} T={T} />}
       </div>
