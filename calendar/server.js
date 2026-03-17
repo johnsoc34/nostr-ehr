@@ -152,7 +152,14 @@ app.get("/login", (req, res) => {
 </html>`);
 });
 
-app.post("/login", express.urlencoded({ extended: false }), async (req, res) => {
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many login attempts. Try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.post("/login", loginLimiter, express.urlencoded({ extended: false }), async (req, res) => {
   try {
     const match = await bcrypt.compare(req.body.password, CALENDAR_PASSWORD_HASH);
     if (match) {

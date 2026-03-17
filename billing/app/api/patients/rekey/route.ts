@@ -4,8 +4,9 @@ import { exec } from 'child_process';
 
 export const dynamic = 'force-dynamic';
 
+const PORTAL_ORIGIN = process.env.PORTAL_URL || 'https://portal.example.com';
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': PORTAL_ORIGIN,
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
