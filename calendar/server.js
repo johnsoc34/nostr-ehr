@@ -24,14 +24,28 @@ const PRACTICE_PK = process.env.PRACTICE_PK || "";
 
 app.use(cors({
   origin: [
-    process.env.CALENDAR_URL || "https://calendar.example.com",
-    process.env.PORTAL_URL || "https://portal.example.com",
-    process.env.BILLING_URL || "https://billing.example.com",
+    "https://calendar.immutablehealthpediatrics.com",
+    "https://portal.immutablehealthpediatrics.com",
+    "https://billing.immutablehealthpediatrics.com",
     "http://localhost:3000",
   ],
   credentials: true,
 }));
 app.use(express.json());
+
+// Rate limit appointment creation (public endpoint)
+const rateLimit = require("express-rate-limit");
+const appointmentLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 appointments per IP per hour
+  message: { error: "Too many appointment requests. Try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/appointments", (req, res, next) => {
+  if (req.method === "POST" && !req.session.authed) return appointmentLimiter(req, res, next);
+  next();
+});
 
 // ─── Session auth ─────────────────────────────────────────────────────────────
 const session = require("express-session");
