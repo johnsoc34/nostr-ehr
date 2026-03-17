@@ -24,9 +24,9 @@ const PRACTICE_PK = process.env.PRACTICE_PK || "";
 
 app.use(cors({
   origin: [
-    "https://calendar.immutablehealthpediatrics.com",
-    "https://portal.immutablehealthpediatrics.com",
-    "https://billing.immutablehealthpediatrics.com",
+    process.env.CALENDAR_URL || "https://calendar.example.com",
+    process.env.PORTAL_URL || "https://portal.example.com",
+    process.env.BILLING_URL || "https://billing.example.com",
     "http://localhost:3000",
   ],
   credentials: true,
