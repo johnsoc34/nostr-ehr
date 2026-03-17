@@ -49,6 +49,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow unauthenticated GET on /api/patients/[npub] (portal name lookup)
+  // But NOT /api/patients/list, /api/patients/create, etc.
+  if (req.method === 'GET' && /^\/api\/patients\/npub1/.test(path)) {
+    return NextResponse.next();
+  }
+
   const cookie = req.cookies.get(COOKIE_NAME)?.value;
   if (cookie && await verifySession(cookie)) {
     return NextResponse.next();

@@ -24,9 +24,9 @@ const PRACTICE_PK = process.env.PRACTICE_PK || "";
 
 app.use(cors({
   origin: [
-    "https://calendar.immutablehealthpediatrics.com",
-    "https://portal.immutablehealthpediatrics.com",
-    "https://billing.immutablehealthpediatrics.com",
+    process.env.CALENDAR_URL || "https://calendar.example.com",
+    process.env.PORTAL_URL || "https://portal.example.com",
+    process.env.BILLING_URL || "https://billing.example.com",
     "http://localhost:3000",
   ],
   credentials: true,
@@ -61,7 +61,7 @@ function requireAuth(req, res, next) {
   if (req.path === "/api/appointments" && req.method === "GET") {
     return next();
   }
-  if (req.path.match(/^\/api\/appointments\/\d+/) && ["GET","PATCH","PUT","DELETE"].includes(req.method)) {
+  if (req.path.match(/^\/api\/appointments\/\d+/) && ["GET","PATCH"].includes(req.method)) {
     return next();
   }
   if (req.session.authed) {
@@ -332,7 +332,7 @@ app.post("/api/appointments", (req, res) => {
       return res.status(400).json({ error: "patient_npub, patient_name, date, start_time, end_time required" });
 
     // Check if slot is available (skip for doctor-created appointments via force flag)
-    if (!req.body.force) {
+    if (!req.body.force || !req.session.authed) {
       const available = db.getAvailableSlotsForDate(date);
       const slotOpen = available.some(s => s.start_time === start_time);
 

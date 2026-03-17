@@ -4313,7 +4313,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
             return(
               <div key={rootId} onClick={()=>{setSelectedThreadId(rootId);setComposing(false);markThreadRead(rootId);}}
                 style={{
-                  padding:"12px 14px",borderBottom:"1px solid #0f172a",cursor:"pointer",
+                  padding:"6px 14px",borderBottom:"1px solid #0f172a",cursor:"pointer",
                   background:isSel?"#1e3a5f":"transparent",
                   borderLeft:isSel?"3px solid #0ea5e9":isRead?"3px solid transparent":"3px solid #0ea5e944",
                   opacity:isRead&&!isSel?0.55:1,
@@ -4321,7 +4321,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
                 onMouseEnter={e=>{ if(!isSel)(e.currentTarget as HTMLElement).style.background="#0d1929"; }}
                 onMouseLeave={e=>{ if(!isSel)(e.currentTarget as HTMLElement).style.background="transparent"; }}
               >
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:3}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:1}}>
                   <div style={{fontSize:12,fontWeight:isRead&&!isSel?400:600,color:latest.fromPractice?"#7dd3fc":isRead&&!isSel?"#64748b":"#e2e8f0",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",maxWidth:200}}>
                     {rootMsg.fromPractice?"You (Practice)":"Patient"}
                   </div>
@@ -7345,7 +7345,7 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
     if(initialTab) setTab(initialTab as ChartTab);
   },[initialTab,initialThreadId,inboxClickCount]);
   // Reset to overview when switching patients
-  useEffect(()=>{ setTab("overview"); setShowDemographics(false); },[patient.id]);
+  useEffect(()=>{ setTab(initialTab||"overview"); setShowDemographics(false); },[patient.id]);
   const [showActions,setShowActions]=useState(false);
   const [showNewEncounter,setShowNewEncounter]=useState(false);
   const [showNurseNote,setShowNurseNote]=useState(false);
@@ -9909,6 +9909,12 @@ function useInboxState(){
   const [done,setDone]=useState<{id:string;ts:number}[]>(()=>{
     try{ return JSON.parse(localStorage.getItem("nostr_ehr_msg_done")||"[]"); }catch{ return []; }
   });
+  const [starred,setStarred]=useState<Set<string>>(()=>{
+    try{ return new Set(JSON.parse(localStorage.getItem("nostr_ehr_msg_starred")||"[]")); }catch{ return new Set(); }
+  });
+  const [notes,setNotes]=useState<Record<string,string>>(()=>{
+    try{ return JSON.parse(localStorage.getItem("nostr_ehr_msg_notes")||"{}"); }catch{ return {}; }
+  });
 
   const markRead=(id:string)=>{
     setRead(s=>{ const n=new Set(s); n.add(id); localStorage.setItem("nostr_ehr_msg_read",JSON.stringify([...n])); return n; });
@@ -9931,13 +9937,29 @@ function useInboxState(){
       return next;
     });
   };
+  const toggleStar=(id:string)=>{
+    setStarred(s=>{
+      const n=new Set(s);
+      if(n.has(id)) n.delete(id); else n.add(id);
+      localStorage.setItem("nostr_ehr_msg_starred",JSON.stringify([...n]));
+      return n;
+    });
+  };
+  const setNote=(id:string,text:string)=>{
+    setNotes(prev=>{
+      const next={...prev};
+      if(text.trim()) next[id]=text.trim(); else delete next[id];
+      localStorage.setItem("nostr_ehr_msg_notes",JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Done items are permanent — threads marked done never reappear in the inbox.
   // "Recent done" shows items done in the last 48h for undo purposes.
   const RECENT_WINDOW=48*60*60*1000;
   const doneIds=new Set(done.map(d=>d.id));
   const recentDone=done.filter(d=>d.ts>Date.now()-RECENT_WINDOW);
-  return{read,done:doneIds,doneEntries:done,recentDone,markRead,markUnread,markDone,undoDone};
+  return{read,done:doneIds,doneEntries:done,recentDone,starred,notes,markRead,markUnread,markDone,undoDone,toggleStar,setNote};
 }
 
 function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
@@ -9948,9 +9970,11 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
   onUnreadChange?:(count:number)=>void;
 }){
   const [msgs,setMsgs]=useState<{id:string;patientId:string;patientName:string;subject:string;preview:string;ts:number;rootId?:string}[]>([]);
-  const [ctxMenu,setCtxMenu]=useState<{x:number;y:number;msgId:string}|null>(null);
+  const [ctxMenu,setCtxMenu]=useState<{x:number;y:number;msgId:string;patientId:string;noReply:boolean}|null>(null);
   const [showRecent,setShowRecent]=useState(false);
-  const {read,done,doneEntries,recentDone,markRead,markUnread,markDone,undoDone}=useInboxState();
+  const {read,done,doneEntries,recentDone,starred,notes,markRead,markUnread,markDone,undoDone,toggleStar,setNote}=useInboxState();
+  const [editingNote,setEditingNote]=useState<string|null>(null);
+  const [noteText,setNoteText]=useState("");
 
   // Subscribe to ALL messages (both directions) so we can build complete threads
   const buildThreads=(items:{eventId:string;pubkey:string;created_at:number;tags:string[][];text:string}[])=>{
@@ -9978,14 +10002,16 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
         if(patient){ threadMap[rootId].patientId=patientId; threadMap[rootId].patientName=patientName; }
         if(!eTag) threadMap[rootId].subject=subject;
       }
-      threadMap[rootId].msgs.push({id:item.eventId,ts:item.created_at,fromPractice,preview});
+      const noReply=item.tags?.some((t:string[])=>t[0]==="no-reply"&&t[1]==="true")||false;
+      threadMap[rootId].msgs.push({id:item.eventId,ts:item.created_at,fromPractice,preview,noReply});
     }
     const threads=Object.entries(threadMap).map(([rootId,t])=>{
       const sorted=[...t.msgs].sort((a,b)=>a.ts-b.ts);
       const latest=sorted[sorted.length-1];
-      const hasUnread=sorted.some(m=>!m.fromPractice);
+      const hasUnread=!latest.fromPractice;
+      const noReply=sorted.some((m:any)=>m.noReply);
       return{id:rootId,rootId,patientId:t.patientId,patientName:t.patientName,
-        subject:t.subject,preview:latest.preview,ts:latest.ts,hasUnread,msgCount:sorted.length};
+        subject:t.subject,preview:latest.preview,ts:latest.ts,hasUnread,noReply,msgCount:sorted.length};
     });
     threads.sort((a,b)=>b.ts-a.ts);
     return threads;
@@ -10092,9 +10118,9 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
     setCtxMenu(null);
   };
 
-  const handleCtx=(e:React.MouseEvent,msgId:string)=>{
+  const handleCtx=(e:React.MouseEvent,msgId:string,patientId?:string,noReply?:boolean)=>{
     e.preventDefault();
-    setCtxMenu({x:e.clientX,y:e.clientY,msgId});
+    setCtxMenu({x:e.clientX,y:e.clientY,msgId,patientId:patientId||"",noReply:!!noReply});
   };
 
   return(
@@ -10115,14 +10141,27 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
             {activeMsgs.length===0?"No active threads":`${activeMsgs.length} active thread${activeMsgs.length!==1?"s":""}`}
           </div>
         </div>
-        {recentDone.length>0&&(
-          <button onClick={e=>{e.stopPropagation();setShowRecent(v=>!v);}} style={{
-            background:"#1e293b",border:"1px solid #334155",color:showRecent?"#e2e8f0":"#64748b",
-            borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 14px",fontWeight:600,
-          }}>
-            {showRecent?"Hide":"Recent done"} ({recentDone.length})
-          </button>
-        )}
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {activeMsgs.filter(m=>read.has(m.id)&&!m.hasUnread&&!starred.has(m.id)).length>1&&(
+            <button onClick={e=>{e.stopPropagation();
+              const clearable=activeMsgs.filter(m=>read.has(m.id)&&!m.hasUnread&&!starred.has(m.id));
+              if(confirm(`Done ${clearable.length} read+replied threads?`)) clearable.forEach(m=>markDone(m.id));
+            }} style={{
+              background:"#1e293b",border:"1px solid #334155",color:"#64748b",
+              borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 14px",fontWeight:600,
+            }} title="Mark done: threads that are read and where you spoke last (excludes starred and patient-waiting)">
+              ✓ Done replied ({activeMsgs.filter(m=>read.has(m.id)&&!m.hasUnread&&!starred.has(m.id)).length})
+            </button>
+          )}
+          {recentDone.length>0&&(
+            <button onClick={e=>{e.stopPropagation();setShowRecent(v=>!v);}} style={{
+              background:"#1e293b",border:"1px solid #334155",color:showRecent?"#e2e8f0":"#64748b",
+              borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 14px",fontWeight:600,
+            }}>
+              {showRecent?"Hide":"Recent done"} ({recentDone.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Thread list */}
@@ -10136,66 +10175,92 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
         {activeMsgs.map((msg,i)=>{
           const isRead=read.has(msg.id);
           const hasUnread=(msg as any).hasUnread&&!isRead;
+          const isStarred=starred.has(msg.id);
+          const isClosed=(msg as any).noReply;
+          const hasNote=!!notes[msg.id];
           const msgCount=(msg as any).msgCount||1;
+          const borderColor=isStarred?"#f59e0b":hasUnread?"#0ea5e9":"transparent";
+          const bgColor=isStarred?"#1a1400":hasUnread?"#0a1628":"#080f1d";
           return(
-            <div key={msg.id}
-              onClick={()=>handleClick(msg)}
-              onContextMenu={e=>handleCtx(e,msg.id)}
-              style={{
-                padding:"7px 16px",
-                borderBottom:i<activeMsgs.length-1?"1px solid #0d1527":"none",
-                cursor:"pointer",
-                background:hasUnread?"#0a1628":"#080f1d",
-                borderLeft:hasUnread?"3px solid #0ea5e9":"3px solid transparent",
-                transition:"background 0.1s",
-                display:"flex",alignItems:"center",gap:12,
-              }}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="#0d1929"}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=hasUnread?"#0a1628":"#080f1d"}
-            >
-              {/* Avatar circle */}
-              <div style={{
-                width:32,height:32,borderRadius:"50%",flexShrink:0,
-                background:hasUnread?"linear-gradient(135deg,#0ea5e9,#3b82f6)":"#1a2640",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:13,fontWeight:700,color:hasUnread?"#fff":"#475569",
-              }}>
-                {msg.patientName.charAt(0).toUpperCase()}
-              </div>
+            <div key={msg.id}>
+              <div
+                onClick={()=>handleClick(msg)}
+                onContextMenu={e=>handleCtx(e,msg.id,msg.patientId,(msg as any).noReply)}
+                style={{
+                  padding:"7px 16px",
+                  borderBottom:i<activeMsgs.length-1?"1px solid #0d1527":"none",
+                  cursor:"pointer",
+                  background:bgColor,
+                  borderLeft:`3px solid ${borderColor}`,
+                  transition:"background 0.1s",
+                  display:"flex",alignItems:"center",gap:12,
+                }}
+                onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="#0d1929"}
+                onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=bgColor}
+              >
+                {/* Star toggle */}
+                <div onClick={e=>{e.stopPropagation();toggleStar(msg.id);}} style={{
+                  flexShrink:0,cursor:"pointer",fontSize:14,width:20,textAlign:"center",
+                  opacity:isStarred?1:0.25,transition:"opacity 0.15s",
+                }} title={isStarred?"Unstar (remove pin)":"Star (pin as waiting)"}>
+                  {isStarred?"⭐":"☆"}
+                </div>
 
-              {/* Patient name — fixed width */}
-              <div style={{width:130,flexShrink:0,
-                fontSize:13,fontWeight:hasUnread?700:400,
-                color:hasUnread?"#e2e8f0":"#64748b",
-                overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
-                {msg.patientName}
-              </div>
+                {/* Avatar circle */}
+                <div style={{
+                  width:32,height:32,borderRadius:"50%",flexShrink:0,
+                  background:isStarred?"linear-gradient(135deg,#f59e0b,#d97706)":hasUnread?"linear-gradient(135deg,#0ea5e9,#3b82f6)":"#1a2640",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:13,fontWeight:700,color:(hasUnread||isStarred)?"#fff":"#475569",
+                }}>
+                  {msg.patientName.charAt(0).toUpperCase()}
+                </div>
 
-              {/* Subject — fixed width, clearly separated */}
-              <div style={{width:160,flexShrink:0,
-                fontSize:12,fontWeight:hasUnread?600:400,
-                color:hasUnread?"#7dd3fc":"#475569",
-                overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
-                {msg.subject}
-                {msgCount>1&&<span style={{fontSize:10,color:"#334155",background:"#111f33",borderRadius:99,padding:"1px 5px",marginLeft:5}}>{msgCount}</span>}
-              </div>
+                {/* Patient name — fixed width */}
+                <div style={{width:120,flexShrink:0,
+                  fontSize:13,fontWeight:hasUnread?700:400,
+                  color:hasUnread?"#e2e8f0":"#64748b",
+                  overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                  {msg.patientName}
+                </div>
 
-              {/* Preview — takes remaining space */}
-              <div style={{flex:1,minWidth:0,
-                fontSize:12,color:"#334155",
-                overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
-                {msg.preview}
-              </div>
+                {/* Subject — fixed width */}
+                <div style={{width:150,flexShrink:0,
+                  fontSize:12,fontWeight:hasUnread?600:400,
+                  color:hasUnread?"#7dd3fc":"#475569",
+                  overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                  {isClosed&&<span title="Thread closed — no reply" style={{marginRight:4}}>🔒</span>}
+                  {msg.subject}
+                  {msgCount>1&&<span style={{fontSize:10,color:"#334155",background:"#111f33",borderRadius:99,padding:"1px 5px",marginLeft:5}}>{msgCount}</span>}
+                </div>
 
-              {/* Timestamp — far right */}
-              <div style={{flexShrink:0,fontSize:11,color:hasUnread?"#64748b":"#334155",minWidth:36,textAlign:"right"}}>
-                {relT(msg.ts)}
-              </div>
+                {/* Preview — takes remaining space */}
+                <div style={{flex:1,minWidth:0,
+                  fontSize:12,color:"#334155",
+                  overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                  {msg.preview}
+                </div>
 
-              {/* Unread dot */}
-              {hasUnread&&(
-                <div style={{width:7,height:7,borderRadius:"50%",background:"#0ea5e9",flexShrink:0}}/>
-              )}
+                {/* Staff note — between preview and timestamp */}
+                {hasNote?(
+                  <div style={{flexShrink:1,minWidth:0,maxWidth:250,
+                    fontSize:10,color:"#f59e0b",cursor:"pointer",
+                    overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}
+                    onClick={e=>{e.stopPropagation();setEditingNote(msg.id);setNoteText(notes[msg.id]||"");}}>
+                    📝 {notes[msg.id]}
+                  </div>
+                ):<div style={{flexShrink:0}}/>}
+
+                {/* Indicators — far right */}
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  <div style={{fontSize:11,color:hasUnread?"#64748b":"#334155",minWidth:36,textAlign:"right"}}>
+                    {relT(msg.ts)}
+                  </div>
+                  {hasUnread&&(
+                    <div style={{width:7,height:7,borderRadius:"50%",background:"#0ea5e9",flexShrink:0}}/>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -10213,7 +10278,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                 <div key={d.id}
                   style={{padding:"6px 16px",borderBottom:"1px solid #0a0f1a",opacity:0.45,cursor:"pointer",
                     display:"flex",alignItems:"center",gap:12}}
-                  onContextMenu={e=>handleCtx(e,d.id)}>
+                  onContextMenu={e=>handleCtx(e,d.id,"",false)}>
                   <div style={{width:28,height:28,borderRadius:"50%",background:"#1a2640",
                     display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#475569",fontWeight:700,flexShrink:0}}>
                     {msg.patientName.charAt(0).toUpperCase()}
@@ -10228,12 +10293,38 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
         )}
       </div>
 
+      {/* Note editor modal */}
+      {editingNote&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}
+          onClick={()=>{setNote(editingNote,noteText);setEditingNote(null);}}>
+          <div style={{background:"#1e293b",border:"1px solid #334155",borderRadius:12,padding:20,width:400,maxWidth:"90vw"}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginBottom:12}}>📝 Staff Note</div>
+            <textarea value={noteText} onChange={e=>setNoteText(e.target.value)}
+              placeholder="Internal note (only visible to staff)..."
+              rows={3} autoFocus
+              style={{width:"100%",boxSizing:"border-box" as const,background:"#0f172a",border:"1px solid #334155",borderRadius:8,color:"#e2e8f0",fontSize:13,padding:"10px 12px",resize:"vertical" as const,fontFamily:"inherit",lineHeight:1.5}}
+            />
+            <div style={{display:"flex",gap:8,marginTop:12,justifyContent:"flex-end"}}>
+              {noteText.trim()!==(notes[editingNote]||"")&&(
+                <button onClick={()=>{setNote(editingNote,"");setNoteText("");setEditingNote(null);}} style={{
+                  background:"none",border:"1px solid #334155",color:"#f87171",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit",
+                }}>Delete note</button>
+              )}
+              <button onClick={()=>{setNote(editingNote,noteText);setEditingNote(null);}} style={{
+                background:"#0ea5e9",border:"none",color:"#fff",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+              }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Context menu */}
       {ctxMenu&&(
         <div style={{
           position:"fixed",left:ctxMenu.x,top:ctxMenu.y,
           background:"#1e293b",border:"1px solid #334155",borderRadius:8,
-          zIndex:9999,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",overflow:"hidden",minWidth:160,
+          zIndex:9999,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",overflow:"hidden",minWidth:180,
         }}
           onClick={e=>e.stopPropagation()}>
           {done.has(ctxMenu.msgId)?(
@@ -10254,6 +10345,15 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                   color:"#e2e8f0",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
                 }}>○ Mark as read</button>
               )}
+              <button onClick={()=>{toggleStar(ctxMenu.msgId);setCtxMenu(null);}} style={{
+                display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
+                color:"#f59e0b",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+                borderTop:"1px solid #334155",
+              }}>{starred.has(ctxMenu.msgId)?"☆ Unstar":"⭐ Star (waiting)"}</button>
+              <button onClick={()=>{setEditingNote(ctxMenu.msgId);setNoteText(notes[ctxMenu.msgId]||"");setCtxMenu(null);}} style={{
+                display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
+                color:"#e2e8f0",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+              }}>{notes[ctxMenu.msgId]?"📝 Edit note":"📝 Add note"}</button>
               <button onClick={()=>{markDone(ctxMenu.msgId);setCtxMenu(null);}} style={{
                 display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
                 color:"#f87171",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
