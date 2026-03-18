@@ -347,6 +347,9 @@ apt install -y certbot python3-certbot-nginx
 Create nginx configs for each service. Example for the relay at `/etc/nginx/sites-available/relay.yourpractice.com`:
 
 ```nginx
+# Rate limit audit trail login attempts
+limit_req_zone $binary_remote_addr zone=audit_login:10m rate=2r/m;
+
 server {
     server_name relay.yourpractice.com;
 
@@ -360,8 +363,10 @@ server {
         proxy_read_timeout 86400;
     }
 
-    # Audit trail (basic auth)
+    # Audit trail (basic auth + rate limit)
     location /audit {
+        limit_req zone=audit_login burst=3 nodelay;
+        limit_req_status 429;
         auth_basic "Audit Trail";
         auth_basic_user_file /etc/nginx/.htpasswd_audit;
         alias /home/nostr/audit/reports;
@@ -390,7 +395,58 @@ server {
 }
 ```
 
-Repeat for billing (3002), calendar (3003), blossom (3004), fhir-api (3005).
+Billing at `/etc/nginx/sites-available/billing.yourpractice.com`:
+
+```nginx
+# Rate limit login attempts (2 per minute sustained, burst of 3)
+limit_req_zone $binary_remote_addr zone=billing_login:10m rate=2r/m;
+
+server {
+    server_name billing.yourpractice.com;
+
+    # Rate-limited login endpoint
+    location = /api/auth {
+        limit_req zone=billing_login burst=3 nodelay;
+        limit_req_status 429;
+        proxy_pass http://localhost:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # CORS for portal patient name lookup
+    location /api/patients/ {
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' '$PORTAL_URL';
+            add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS';
+            add_header 'Access-Control-Allow-Headers' 'Content-Type';
+            add_header 'Access-Control-Max-Age' 86400;
+            return 204;
+        }
+        add_header 'Access-Control-Allow-Origin' '$PORTAL_URL';
+        proxy_pass http://localhost:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://localhost:3002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen 80;
+}
+```
+
+Repeat for calendar (3003), blossom (3004), fhir-api (3005).
 
 For Blossom, block the public UI:
 
@@ -742,6 +798,11 @@ pm2 startup
 - [ ] Relay `nip42_auth = true` with pubkey whitelist
 - [ ] Blossom public UI blocked via nginx
 - [ ] Audit trail accessible only with basic auth
+- [ ] Rate limiting on all password-based login endpoints:
+  - Calendar: `express-rate-limit` (5 attempts per 15 min per IP) on `POST /login`
+  - Calendar: `express-rate-limit` (10 per hour per IP) on `POST /api/appointments` (unauthenticated only)
+  - Billing: nginx `limit_req` (2/min + burst 3) on `/api/auth`
+  - Audit trail: nginx `limit_req` (2/min + burst 3) on `/audit`
 - [ ] Backups running daily
 - [ ] SSL certs auto-renew (certbot handles this)
 - [ ] No practice nsec stored on server — billing uses `BILLING_AGENT_NSEC`, FHIR API uses `PRACTICE_SK_HEX` (known tradeoff, see below)
