@@ -10306,7 +10306,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
               style={{width:"100%",boxSizing:"border-box" as const,background:"#0f172a",border:"1px solid #334155",borderRadius:8,color:"#e2e8f0",fontSize:13,padding:"10px 12px",resize:"vertical" as const,fontFamily:"inherit",lineHeight:1.5}}
             />
             <div style={{display:"flex",gap:8,marginTop:12,justifyContent:"flex-end"}}>
-              {noteText.trim()!==(notes[editingNote]||"")&&(
+              {notes[editingNote]&&(
                 <button onClick={()=>{setNote(editingNote,"");setNoteText("");setEditingNote(null);}} style={{
                   background:"none",border:"1px solid #334155",color:"#f87171",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit",
                 }}>Delete note</button>
