@@ -69,6 +69,18 @@ for (const item of copyItems) {
   }
 }
 
+// Step 3b: Overwrite practice-specific assets with generic defaults
+const defaults = path.join(ROOT, "electron", "defaults");
+if (fs.existsSync(defaults)) {
+  const defaultFiles = fs.readdirSync(defaults);
+  for (const f of defaultFiles) {
+    const src = path.join(defaults, f);
+    const dst = path.join(STAGE, "nextapp", "public", f);
+    fs.copyFileSync(src, dst);
+    console.log(`  → Replaced public/${f} with generic default`);
+  }
+}
+
 // Step 4: Install only production dependencies in staging
 console.log("[4/5] Installing production dependencies (this takes a minute)...");
 run("npm install --omit=dev --ignore-scripts", { cwd: path.join(STAGE, "nextapp") });
