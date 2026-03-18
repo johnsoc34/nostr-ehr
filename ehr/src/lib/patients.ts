@@ -123,6 +123,7 @@ export function addPatient(
   
   const patient: Patient = { 
     ...patientData, 
+    name: formatName(patientData.name),
     id: crypto.randomUUID(), 
     createdAt: Date.now(),
     nsec: storeNsec ? nsec : undefined,
@@ -182,7 +183,7 @@ export function addPatientByNpub(p: {
 
   const patient: Patient = {
     id: crypto.randomUUID(),
-    name: p.name,
+    name: formatName(p.name),
     dob: p.dob || "",
     sex: p.sex || "unknown",
     phone: p.phone,
@@ -227,6 +228,20 @@ export function clearStoredNsec(patientId: string): void {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Normalize name to "Last, First" format.
+ *  - Already has comma → trim and return
+ *  - Two+ words, no comma → last word is surname, rest is first/middle
+ *  - Single word → return as-is */
+export function formatName(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.includes(",")) return trimmed.split(",").map(s => s.trim()).join(", ");
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  const last = parts.pop()!;
+  return `${last}, ${parts.join(" ")}`;
+}
 
 export function ageFromDob(dob: string): { years: number; months: number; display: string } {
   if (!dob) return { years: 0, months: 0, display: "No DOB" };

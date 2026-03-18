@@ -1635,33 +1635,27 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
           <div style={{fontSize:11,color:"#94a3b8"}}>DOB: {created.dob} • {"Monthly Member"}</div>
         </div>
         
-        <div style={{...S.card,background:"#0f172a",padding:16}}>
-          <div style={{fontWeight:600,fontSize:12,color:"#fbbf24",marginBottom:8}}>
-            🔑 Patient Portal Access Code
-          </div>
-          <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}>
-            Give this to the patient (print or save to thumb drive). They'll use it to access their records at {PORTAL_URL ? PORTAL_URL.replace("https://","") : "the patient portal"}
-          </div>
-          <div style={{...S.mono,background:"#1e293b",padding:12,fontSize:10,marginBottom:12,userSelect:"all" as const}}>
-            {createdNsec}
-          </div>
-          <div style={{fontSize:10,color:created.nsecStored?"#4ade80":"#f87171",fontStyle:"italic",marginBottom:8}}>
+        <div style={{...S.card,background:"#0f172a",padding:12,marginTop:8}}>
+          <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Access Code</div>
+          <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{createdNsec}</div>
+          <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {created.npub?.substring(0,24)}...</div>
+          <div style={{fontSize:10,color:created.nsecStored?"#4ade80":"#f87171",fontStyle:"italic",marginTop:8}}>
             {created.nsecStored
               ? "✓ Access code stored locally (can be revealed in Portal Access panel)"
               : "⚠️ This code is shown once and will NOT be stored. If lost, use Re-key to generate a new one."}
           </div>
         </div>
  
-        <div style={{display:"flex",gap:8,marginTop:16}}>
+        <div style={{display:"flex",gap:8,marginTop:16,flexWrap:"wrap" as const}}>
         <Btn solid col="#0ea5e9" onClick={()=>{
           if(!created.nsecStored && !confirm("Have you saved the patient's access code? It will not be shown again.")) return;
           onAdd(created);
         }}>Continue</Btn>
   
-        <Btn col="#7c3aed" onClick={()=>{
-          navigator.clipboard.writeText(createdNsec);
-          alert("Access code (nsec) copied to clipboard");
-        }}>📋 Copy nsec</Btn>
+        <Btn col="#fbbf24" onClick={()=>{
+          navigator.clipboard.writeText(`${created.name}\nnsec: ${createdNsec}\nnpub: ${created.npub||""}`);
+          alert("Keys (nsec + npub) copied to clipboard");
+        }}>📋 Copy Keys</Btn>
   
         <Btn col="#7dd3fc" onClick={()=>{
           navigator.clipboard.writeText(created.npub||"");
@@ -1744,6 +1738,11 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
             <div style={{...S.card,background:"#0f172a",padding:12,marginTop:8}}>
               <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Parent Access Code</div>
               <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{familyCreated.parentNsec}</div>
+              <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {familyCreated.parent.npub?.substring(0,24)}...</div>
+              <Btn small col="#fbbf24" style={{marginTop:6}} onClick={()=>{
+                navigator.clipboard.writeText(`${familyCreated.parent.name}\nnsec: ${familyCreated.parentNsec}\nnpub: ${familyCreated.parent.npub||""}`);
+                alert("Parent keys (nsec + npub) copied");
+              }}>📋 Copy Keys</Btn>
             </div>
           )}
         </div>
@@ -1756,6 +1755,10 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
               <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Access Code</div>
               <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{c.nsec}</div>
               <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {c.patient.npub?.substring(0,24)}...</div>
+              <Btn small col="#fbbf24" style={{marginTop:6}} onClick={()=>{
+                navigator.clipboard.writeText(`${c.patient.name}\nnsec: ${c.nsec}\nnpub: ${c.patient.npub||""}`);
+                alert(`${c.patient.name} keys (nsec + npub) copied`);
+              }}>📋 Copy Keys</Btn>
             </div>
           </div>
         ))}
