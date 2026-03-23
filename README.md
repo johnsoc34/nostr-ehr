@@ -160,7 +160,7 @@ For the complete interoperability specification — including FHIR payload schem
 
 ### Option 1: Desktop App (Recommended for Evaluation)
 
-Download `NostrEHR-Setup-1.0.0.exe` from [Releases](../../releases).
+Download `NostrEHR-Setup-1.2.0.exe` from [Releases](../../releases).
 
 Run the installer. On first launch, choose **Demo Mode** to explore with a temporary keypair, or enter your own relay and practice key configuration.
 
