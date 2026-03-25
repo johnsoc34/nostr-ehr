@@ -10078,12 +10078,17 @@ function useInboxState(){
   const [notes,setNotes]=useState<Record<string,string>>(()=>{
     try{ return JSON.parse(localStorage.getItem("nostr_ehr_msg_notes")||"{}"); }catch{ return {}; }
   });
+  const [forcedUnread,setForcedUnread]=useState<Set<string>>(()=>{
+    try{ return new Set(JSON.parse(localStorage.getItem("nostr_ehr_msg_forced_unread")||"[]")); }catch{ return new Set(); }
+  });
 
   const markRead=(id:string)=>{
     setRead(s=>{ const n=new Set(s); n.add(id); localStorage.setItem("nostr_ehr_msg_read",JSON.stringify([...n])); return n; });
+    setForcedUnread(s=>{ const n=new Set(s); n.delete(id); localStorage.setItem("nostr_ehr_msg_forced_unread",JSON.stringify([...n])); return n; });
   };
   const markUnread=(id:string)=>{
     setRead(s=>{ const n=new Set(s); n.delete(id); localStorage.setItem("nostr_ehr_msg_read",JSON.stringify([...n])); return n; });
+    setForcedUnread(s=>{ const n=new Set(s); n.add(id); localStorage.setItem("nostr_ehr_msg_forced_unread",JSON.stringify([...n])); return n; });
   };
   const markDone=(id:string)=>{
     setDone(prev=>{
@@ -10122,7 +10127,7 @@ function useInboxState(){
   const RECENT_WINDOW=48*60*60*1000;
   const doneIds=new Set(done.map(d=>d.id));
   const recentDone=done.filter(d=>d.ts>Date.now()-RECENT_WINDOW);
-  return{read,done:doneIds,doneEntries:done,recentDone,starred,notes,markRead,markUnread,markDone,undoDone,toggleStar,setNote};
+  return{read,done:doneIds,doneEntries:done,recentDone,starred,notes,forcedUnread,markRead,markUnread,markDone,undoDone,toggleStar,setNote};
 }
 
 function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
@@ -10135,7 +10140,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
   const [msgs,setMsgs]=useState<{id:string;patientId:string;patientName:string;subject:string;preview:string;ts:number;rootId?:string}[]>([]);
   const [ctxMenu,setCtxMenu]=useState<{x:number;y:number;msgId:string;patientId:string;noReply:boolean}|null>(null);
   const [showRecent,setShowRecent]=useState(false);
-  const {read,done,doneEntries,recentDone,starred,notes,markRead,markUnread,markDone,undoDone,toggleStar,setNote}=useInboxState();
+  const {read,done,doneEntries,recentDone,starred,notes,forcedUnread,markRead,markUnread,markDone,undoDone,toggleStar,setNote}=useInboxState();
   const [editingNote,setEditingNote]=useState<string|null>(null);
   const [noteText,setNoteText]=useState("");
 
@@ -10262,7 +10267,18 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
     // Resurface if thread timestamp is newer than when it was done (new reply came in)
     return m.ts > Math.floor(d.ts/1000);
   });
-  const unreadCount=activeMsgs.filter(m=>!read.has(m.id)&&(m as any).hasUnread).length;
+
+  // Auto-seed read set: messages where latest is from practice (you already replied)
+  // should be in the read set so right-click menu and styling are consistent
+  useEffect(()=>{
+    if(!activeMsgs.length)return;
+    const toSeed=activeMsgs.filter(m=>!(m as any).hasUnread&&!read.has(m.id)&&!forcedUnread.has(m.id));
+    if(toSeed.length>0){
+      toSeed.forEach(m=>markRead(m.id));
+    }
+  },[activeMsgs.length]);
+
+  const unreadCount=activeMsgs.filter(m=>(!read.has(m.id)&&(m as any).hasUnread)||forcedUnread.has(m.id)).length;
 
   // Notify parent of unread count changes (for nav badge)
   useEffect(()=>{ onUnreadChange?.(unreadCount); },[unreadCount]);
@@ -10337,7 +10353,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
         )}
         {activeMsgs.map((msg,i)=>{
           const isRead=read.has(msg.id);
-          const hasUnread=(msg as any).hasUnread&&!isRead;
+          const hasUnread=((msg as any).hasUnread&&!isRead)||(!isRead&&forcedUnread.has(msg.id));
           const isStarred=starred.has(msg.id);
           const isClosed=(msg as any).noReply;
           const hasNote=!!notes[msg.id];
