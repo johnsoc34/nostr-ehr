@@ -245,18 +245,149 @@ function npubToHex(npub: string): string {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Theme System ────────────────────────────────────────────────────────────
+const THEME_CSS = `
+:root {
+  --bg-app: #0f172a;
+  --bg-card: #1e293b;
+  --bg-input: #0f172a;
+  --bg-deep: #0a1628;
+  --bg-inset: #0c1a2e;
+  --bg-hover: #162032;
+  --bg-sidebar: #0f172a;
+  --bg-header: #162032;
+  --bg-tab-bar: #0f172a;
+  --bg-modal: rgba(30,41,59,0.95);
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-label: #475569;
+  --text-faint: #334155;
+  --border: #334155;
+  --border-subtle: #1e293b;
+  --border-accent: #1e3a5f;
+  --tab-active: #e0f2fe;
+  --shadow: rgba(0,0,0,0.3);
+  --shadow-heavy: rgba(0,0,0,0.5);
+  --overlay: rgba(0,0,0,0.5);
+  --bg-sent: #0c2240;
+  --border-sent: #1e4a7f;
+  --text-sender: #7dd3fc;
+  --tint-green: #052e16;
+  --tint-green-border: #166534;
+  --tint-red: #1c0a0a;
+  --tint-red-border: #991b1b;
+  --tint-amber: #1c1408;
+  --tint-amber-border: #78350f;
+  --tint-purple: #1e1040;
+  --tint-purple-border: #7c3aed;
+  --accent-green: #4ade80;
+  --accent-green-text: #4ade80;
+  --accent-amber-text: #fde68a;
+  --accent-amber-sub: #fbbf24;
+  --accent-red-text: #fca5a5;
+  --accent-red-sub: #fecaca;
+  --grid-major: #1e3a5f;
+  --grid-minor: #152238;
+  --chart-label: #475569;
+  --accent-purple: #c4b5fd;
+  --accent-purple-sub: #a78bfa;
+  --accent-blue: #7dd3fc;
+  --accent-blue-sub: #38bdf8;
+  --tab-selected-bg: #1e3a5f;
+  --tab-selected-text: #7dd3fc;
+}
+html.light {
+  --bg-app: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-input: #f1f5f9;
+  --bg-deep: #e8ecf1;
+  --bg-inset: #eef2f7;
+  --bg-hover: #e2e8f0;
+  --bg-sidebar: #ffffff;
+  --bg-header: #f8fafc;
+  --bg-tab-bar: #ffffff;
+  --bg-modal: rgba(255,255,255,0.95);
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --text-label: #64748b;
+  --text-faint: #94a3b8;
+  --border: #cbd5e1;
+  --border-subtle: #e2e8f0;
+  --border-accent: #60a5fa;
+  --tab-active: #0369a1;
+  --shadow: rgba(0,0,0,0.08);
+  --shadow-heavy: rgba(0,0,0,0.15);
+  --overlay: rgba(0,0,0,0.3);
+  --bg-sent: #dbeafe;
+  --border-sent: #93c5fd;
+  --text-sender: #1d4ed8;
+  --tint-green: #f0fdf4;
+  --tint-green-border: #bbf7d0;
+  --tint-red: #fef2f2;
+  --tint-red-border: #fecaca;
+  --tint-amber: #fffbeb;
+  --tint-amber-border: #fde68a;
+  --tint-purple: #faf5ff;
+  --tint-purple-border: #c4b5fd;
+  --accent-green: #16a34a;
+  --accent-green-text: #15803d;
+  --accent-amber-text: #92400e;
+  --accent-amber-sub: #b45309;
+  --accent-red-text: #dc2626;
+  --accent-red-sub: #b91c1c;
+  --grid-major: #cbd5e1;
+  --grid-minor: #e2e8f0;
+  --chart-label: #64748b;
+  --accent-purple: #7c3aed;
+  --accent-purple-sub: #6d28d9;
+  --accent-blue: #2563eb;
+  --accent-blue-sub: #1d4ed8;
+  --tab-selected-bg: #2563eb;
+  --tab-selected-text: #ffffff;
+}
+html.light select, html.light input, html.light textarea {
+  color-scheme: light;
+}
+`;
+
+function useTheme() {
+  const [dark, setDark] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("nostr_ehr_theme") !== "light";
+  });
+  useEffect(() => {
+    const el = document.documentElement;
+    if (dark) { el.classList.remove("light"); localStorage.setItem("nostr_ehr_theme", "dark"); }
+    else { el.classList.add("light"); localStorage.setItem("nostr_ehr_theme", "light"); }
+  }, [dark]);
+  return { dark, toggle: () => setDark(d => !d) };
+}
+
+// Inject theme CSS once + apply saved theme class synchronously (before React hydration)
+if (typeof document !== "undefined" && !document.getElementById("ehr-theme-css")) {
+  const style = document.createElement("style");
+  style.id = "ehr-theme-css";
+  style.textContent = THEME_CSS;
+  document.head.appendChild(style);
+  if (localStorage.getItem("nostr_ehr_theme") === "light") {
+    document.documentElement.classList.add("light");
+  }
+}
+
 const S = {
-  app:   {height:"100vh",overflow:"hidden",background:"#0f172a",color:"#e2e8f0",fontFamily:"'DM Sans','Helvetica Neue',sans-serif",display:"flex"} as React.CSSProperties,
+  app:   {height:"100vh",overflow:"hidden",background:"var(--bg-app)",color:"var(--text-primary)",fontFamily:"'DM Sans','Helvetica Neue',sans-serif",display:"flex"} as React.CSSProperties,
   panel: {flex:1,padding:"24px 28px",overflowY:"auto" as const},
-  card:  {background:"#1e293b",borderRadius:10,padding:"14px 16px",marginBottom:10} as React.CSSProperties,
-  input: {width:"100%",background:"#0f172a",border:"1px solid #334155",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:12,fontFamily:"inherit",boxSizing:"border-box" as const,outline:"none"},
-  lbl:   {color:"#475569",fontSize:10,textTransform:"uppercase" as const,letterSpacing:"0.6px",marginBottom:4,display:"block"},
-  mono:  {fontFamily:"monospace",fontSize:10,background:"#0a1628",padding:"8px 10px",borderRadius:6,wordBreak:"break-all" as const,lineHeight:1.8},
+  card:  {background:"var(--bg-card)",borderRadius:10,padding:"14px 16px",marginBottom:10} as React.CSSProperties,
+  input: {width:"100%",background:"var(--bg-input)",border:"1px solid var(--border)",borderRadius:7,padding:"8px 10px",color:"var(--text-primary)",fontSize:12,fontFamily:"inherit",boxSizing:"border-box" as const,outline:"none"},
+  lbl:   {color:"var(--text-label)",fontSize:10,textTransform:"uppercase" as const,letterSpacing:"0.6px",marginBottom:4,display:"block"},
+  mono:  {fontFamily:"monospace",fontSize:10,background:"var(--bg-deep)",padding:"8px 10px",borderRadius:6,wordBreak:"break-all" as const,lineHeight:1.8},
   grid2: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:10} as React.CSSProperties,
   grid3: {display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10} as React.CSSProperties,
 };
 
-function Badge({t,col="#0ea5e9",bg="#0c1a2e"}:{t:string;col?:string;bg?:string}){
+function Badge({t,col="#0ea5e9",bg="var(--bg-inset)"}:{t:string;col?:string;bg?:string}){
   return <span style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:bg,color:col,fontWeight:700,whiteSpace:"nowrap"}}>{t}</span>;
 }
 function Btn({children,onClick,col="#0ea5e9",solid=false,disabled=false,small=false,style={},title}:{
@@ -266,10 +397,10 @@ function Btn({children,onClick,col="#0ea5e9",solid=false,disabled=false,small=fa
     background:solid?`linear-gradient(90deg,${col}cc,${col})`:"transparent",
     border:`1px solid ${col}44`,color:solid?"#fff":col,borderRadius:7,
     padding:small?"4px 10px":"7px 14px",fontSize:small?10:12,cursor:disabled?"not-allowed":"pointer",
-    opacity:disabled?0.4:1,fontFamily:"inherit",fontWeight:solid?600:400,...style,
+    opacity:disabled?0.4:1,fontFamily:"inherit",fontWeight:solid?600:400,transition:"background 0.2s,color 0.2s",...style,
   }}>{children}</button>;
 }
-const ST_COL:Record<string,string>={connected:"#4ade80",connecting:"#f59e0b",disconnected:"#64748b",error:"#f87171"};
+const ST_COL:Record<string,string>={connected:"var(--accent-green)",connecting:"#f59e0b",disconnected:"#64748b",error:"#f87171"};
 
 // ─── Publish Patient Demographics (kind 2110) ────────────────────────────────
 // Publishes a FHIR Patient resource to the relay so demographics sync across browsers.
@@ -700,13 +831,13 @@ function VitalsWidget({patient,keys,relay,onSaved}:{
   };
 
   return(
-    <div style={{...S.card,background:"#0a1628",border:"1px solid #1e3a5f",marginBottom:12,padding:"12px 14px"}}>
+    <div style={{...S.card,background:"var(--bg-deep)",border:"1px solid var(--border-accent)",marginBottom:12,padding:"12px 14px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{fontWeight:600,fontSize:12}}>📊 Record Vitals</div>
           {bmi&&<span style={{color:"#7dd3fc",fontSize:11}}>BMI: {bmi}</span>}
         </div>
-        {status==="saved"&&<Badge t="✓ Saved" col="#4ade80" bg="#052e16"/>}
+        {status==="saved"&&<Badge t="✓ Saved" col="var(--accent-green)" bg="var(--tint-green)"/>}
         {status==="error"&&<span style={{color:"#f87171",fontSize:11}}>✗ {errorMsg}</span>}
       </div>
       {/* Weight + Height row */}
@@ -1271,33 +1402,33 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
           <defs>
             <clipPath id="chartClip"><rect x={PL} y={PT} width={cw} height={ch}/></clipPath>
           </defs>
-          <rect x={PL} y={PT} width={cw} height={ch} fill="#0a1628" rx="4"/>
+          <rect x={PL} y={PT} width={cw} height={ch} fill="var(--bg-deep)" rx="4"/>
           {/* Y gridlines */}
           {yGridLines.map(v=>{
             const isLabel=(v-startY)%yLabelStep===0;
             return(<g key={v}>
               <line x1={PL} y1={ay(v)} x2={PL+cw} y2={ay(v)}
-                stroke={isLabel?"#1e3a5f":"#152238"} strokeWidth={isLabel?1:0.5}/>
-              {isLabel&&<text x={PL-6} y={ay(v)+4} textAnchor="end" fill="#475569" fontSize="9">
+                stroke={isLabel?"var(--grid-major)":"var(--grid-minor)"} strokeWidth={isLabel?1:0.5}/>
+              {isLabel&&<text x={PL-6} y={ay(v)+4} textAnchor="end" fill="var(--chart-label)" fontSize="9">
                 {yConfig?yConfig.fmtLeft(v):v}
               </text>}
-              {isLabel&&yConfig?.fmtRight&&<text x={PL+cw+6} y={ay(v)+4} textAnchor="start" fill="#475569" fontSize="9">
+              {isLabel&&yConfig?.fmtRight&&<text x={PL+cw+6} y={ay(v)+4} textAnchor="start" fill="var(--chart-label)" fontSize="9">
                 {yConfig.fmtRight(v)}
               </text>}
-              {!yConfig&&<text x={PL-6} y={ay(v)+4} textAnchor="end" fill="#475569" fontSize="9">{v}</text>}
+              {!yConfig&&<text x={PL-6} y={ay(v)+4} textAnchor="end" fill="var(--chart-label)" fontSize="9">{v}</text>}
             </g>);
           })}
           {/* X gridlines */}
           {xGridLines.map(a=>(
             <g key={`xg${a}`}>
               <line x1={ax(a)} y1={PT} x2={ax(a)} y2={PT+ch}
-                stroke={xLabelTicks.includes(a)?"#1e3a5f":"#152238"}
+                stroke={xLabelTicks.includes(a)?"var(--grid-major)":"var(--grid-minor)"}
                 strokeWidth={xLabelTicks.includes(a)?1:0.5}/>
             </g>
           ))}
           {/* X labels */}
           {xLabelTicks.map(a=>(
-            <text key={`xl${a}`} x={ax(a)} y={PT+ch+14} textAnchor="middle" fill="#475569" fontSize="9">
+            <text key={`xl${a}`} x={ax(a)} y={PT+ch+14} textAnchor="middle" fill="var(--chart-label)" fontSize="9">
               {a<48?`${a}mo`:`${Math.round(a/12)}y`}
             </text>
           ))}
@@ -1305,7 +1436,7 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
           <g clipPath="url(#chartClip)">
           {pctLines.map(({key,col})=>(
             <path key={key} d={chartCurves.map((c,i)=>`${i===0?"M":"L"}${ax(c.age).toFixed(1)},${ay(c[key] as number).toFixed(1)}`).join(" ")}
-              fill="none" stroke={col} strokeWidth="1.5" opacity="0.7"/>
+              fill="none" stroke={col} strokeWidth="1.5" opacity="0.85"/>
           ))}
           {preciseAgeMonths>=minAge&&preciseAgeMonths<=maxAge&&(
             <line x1={ax(preciseAgeMonths)} y1={PT} x2={ax(preciseAgeMonths)} y2={PT+ch}
@@ -1329,11 +1460,11 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
             return <text key={`lbl${key}`} x={PL+cw+(yConfig?52:3)} y={labelY}
               fill={col} fontSize="8" opacity="0.8">{label}</text>;
           })}
-          <text x={PL+cw/2} y={H-2} textAnchor="middle" fill="#475569" fontSize="10">{xLabel}</text>
+          <text x={PL+cw/2} y={H-2} textAnchor="middle" fill="var(--chart-label)" fontSize="10">{xLabel}</text>
           <text transform={`rotate(-90,12,${PT+ch/2})`} x="0" y={PT+ch/2+4}
-            textAnchor="middle" fill="#475569" fontSize="10">{yLabel}</text>
+            textAnchor="middle" fill="var(--chart-label)" fontSize="10">{yLabel}</text>
           {yConfig?.fmtRight&&<text transform={`rotate(90,${PL+cw+88},${PT+ch/2})`} x={PL+cw+88} y={PT+ch/2+4}
-            textAnchor="middle" fill="#475569" fontSize="10">
+            textAnchor="middle" fill="var(--chart-label)" fontSize="10">
             {yLabel.startsWith("Weight")?"Weight (lbs)":yLabel.startsWith("Height")?"Height (in)":""}
           </text>}
         </svg>
@@ -1355,14 +1486,14 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div>
           <div style={{fontWeight:700,fontSize:14}}>📈 Growth Charts</div>
-          <div style={{color:"#475569",fontSize:11,marginTop:2}}>
+          <div style={{color:"var(--text-label)",fontSize:11,marginTop:2}}>
             {useWHO?"WHO Standards (0–24 months)":"CDC Reference (2–20 years)"} · {sex==="male"?"Boys":"Girls"}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <div style={{textAlign:"right"}}>
-            <div style={{color:"#e2e8f0",fontSize:13,fontWeight:600}}>{age.display}</div>
-            <div style={{color:"#475569",fontSize:11}}>{new Date(patient.dob).toLocaleDateString()}</div>
+            <div style={{color:"var(--text-primary)",fontSize:13,fontWeight:600}}>{age.display}</div>
+            <div style={{color:"var(--text-label)",fontSize:11}}>{new Date(patient.dob).toLocaleDateString()}</div>
           </div>
           <Btn small col="#06b6d4" onClick={()=>setShowPrintModal(true)}>🖨 Print</Btn>
         </div>
@@ -1372,15 +1503,15 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
       <VitalsWidget key={patient.id} patient={patient} keys={keys} relay={relay} onSaved={()=>setRefreshTrigger(t=>t+1)}/>
 
       {/* Chart tabs */}
-      <div style={{display:"flex",gap:4,marginBottom:12,borderBottom:"1px solid #1e293b",paddingBottom:0}}>
+      <div style={{display:"flex",gap:4,marginBottom:12,borderBottom:"1px solid var(--border-subtle)",paddingBottom:0}}>
         {([["weight","⚖️ Weight"],["height","📏 Height"]] as [string,string][])
         .concat(useWHO?[["hc","📐 Head Circ"]]:[["bmi","🧮 BMI"],["hv","📈 Ht Velocity"]])
         .map(([id,label])=>(
           <button key={id} onClick={()=>setGrowthTab(id as any)} style={{
             padding:"7px 14px",border:"none",cursor:"pointer",fontFamily:"inherit",
             background:"transparent",
-            borderBottom:growthTab===id?"2px solid #0ea5e9":"2px solid transparent",
-            color:growthTab===id?"#e0f2fe":"#64748b",fontSize:12,fontWeight:growthTab===id?600:400,
+            borderBottom:growthTab===id?"2px solid var(--tab-active)":"2px solid transparent",
+            color:growthTab===id?"var(--tab-active)":"var(--text-muted)",fontSize:12,fontWeight:growthTab===id?600:400,
           }}>{label}</button>
         ))}
       </div>
@@ -1418,12 +1549,12 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
       </div>
 
       {growthTab==="bmi"&&bmiDots.length===0&&(
-        <div style={{color:"#475569",fontSize:12,textAlign:"center",padding:"8px 0"}}>
+        <div style={{color:"var(--text-label)",fontSize:12,textAlign:"center",padding:"8px 0"}}>
           BMI requires both weight and height recorded on the same visit
         </div>
       )}
       {growthTab==="hv"&&hvDots.length===0&&(
-        <div style={{color:"#475569",fontSize:12,textAlign:"center",padding:"8px 0"}}>
+        <div style={{color:"var(--text-label)",fontSize:12,textAlign:"center",padding:"8px 0"}}>
           Height velocity requires at least 2 height measurements ≥3 months apart
         </div>
       )}
@@ -1437,7 +1568,7 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
           <div style={{width:10,height:10,borderRadius:"50%",
             background:growthTab==="weight"?"#f97316":growthTab==="height"?"#22d3ee":growthTab==="hv"?"#10b981":growthTab==="hc"?"#f472b6":"#a78bfa",
             border:"2px solid #fff"}}/>
-          <span style={{color:"#94a3b8",fontSize:11}}>
+          <span style={{color:"var(--text-secondary)",fontSize:11}}>
             {growthTab==="weight"
               ?`${weightDots.length} weight measurement${weightDots.length!==1?"s":""}`
               :growthTab==="height"
@@ -1453,12 +1584,12 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
 
       {/* Print Modal */}
       {showPrintModal&&<>
-        <div onClick={()=>setShowPrintModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}}/>
+        <div onClick={()=>setShowPrintModal(false)} style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
-          background:"#1e293b",border:"1px solid #334155",borderRadius:12,padding:20,
-          minWidth:320,zIndex:301,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+          background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:12,padding:20,
+          minWidth:320,zIndex:301,boxShadow:"0 20px 60px var(--shadow-heavy)"}}>
           <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>🖨 Print Growth Charts</div>
-          <div style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>Select charts to include in the PDF:</div>
+          <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:12}}>Select charts to include in the PDF:</div>
           {([
             ["weight","⚖️ Weight",weightDots.length>0],
             ["height","📏 Height",heightDots.length>0],
@@ -1468,11 +1599,11 @@ function GrowthChart({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
                 ["hv","📈 Height Velocity",hvDots.length>0] as [string,string,boolean]]),
           ] as [string,string,boolean][]).map(([id,label,hasData])=>(
             <label key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",
-              fontSize:13,color:hasData?"#e2e8f0":"#475569",cursor:"pointer"}}>
+              fontSize:13,color:hasData?"var(--text-primary)":"var(--text-label)",cursor:"pointer"}}>
               <input type="checkbox" checked={!!printSelections[id]}
                 onChange={e=>setPrintSelections(p=>({...p,[id]:e.target.checked}))}/>
               {label}
-              {!hasData&&<span style={{fontSize:10,color:"#64748b"}}>(no data)</span>}
+              {!hasData&&<span style={{fontSize:10,color:"var(--text-muted)"}}>(no data)</span>}
             </label>
           ))}
           <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
@@ -1628,18 +1759,18 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
   // ── Post-creation card: practice-keyed patient (show nsec) ──
   if(created && created.keySource==="practice"){
     return(
-      <div style={{...S.card,border:"1px solid #166534",background:"#052e16"}}>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Patient Created</div>
+      <div style={{...S.card,border:"1px solid var(--tint-green-border)",background:"var(--tint-green)"}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"var(--accent-green)"}}>✓ Patient Created</div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:13,color:"#e2e8f0",marginBottom:4}}>{created.name}</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>DOB: {created.dob} • {"Monthly Member"}</div>
+          <div style={{fontSize:13,color:"var(--text-primary)",marginBottom:4}}>{created.name}</div>
+          <div style={{fontSize:11,color:"var(--text-secondary)"}}>DOB: {created.dob} • {"Monthly Member"}</div>
         </div>
         
-        <div style={{...S.card,background:"#0f172a",padding:12,marginTop:8}}>
+        <div style={{...S.card,background:"var(--bg-app)",padding:12,marginTop:8}}>
           <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Access Code</div>
-          <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{createdNsec}</div>
-          <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {created.npub?.substring(0,24)}...</div>
-          <div style={{fontSize:10,color:created.nsecStored?"#4ade80":"#f87171",fontStyle:"italic",marginTop:8}}>
+          <div style={{...S.mono,background:"var(--bg-card)",padding:8,fontSize:10,userSelect:"all" as const}}>{createdNsec}</div>
+          <div style={{fontSize:9,color:"var(--text-label)",marginTop:4}}>npub: {created.npub?.substring(0,24)}...</div>
+          <div style={{fontSize:10,color:created.nsecStored?"var(--accent-green)":"#f87171",fontStyle:"italic",marginTop:8}}>
             {created.nsecStored
               ? "✓ Access code stored locally (can be revealed in Portal Access panel)"
               : "⚠️ This code is shown once and will NOT be stored. If lost, use Re-key to generate a new one."}
@@ -1677,23 +1808,23 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
     }, null, 2);
  
     return(
-      <div style={{...S.card,border:"1px solid #166534",background:"#052e16"}}>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Patient Added</div>
+      <div style={{...S.card,border:"1px solid var(--tint-green-border)",background:"var(--tint-green)"}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"var(--accent-green)"}}>✓ Patient Added</div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:13,color:"#e2e8f0",marginBottom:4}}>{created.name}</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>
+          <div style={{fontSize:13,color:"var(--text-primary)",marginBottom:4}}>{created.name}</div>
+          <div style={{fontSize:11,color:"var(--text-secondary)"}}>
             npub: {created.npub?.substring(0,20)}... • {"Monthly Member"}
           </div>
         </div>
  
-        <div style={{...S.card,background:"#0f172a",padding:16}}>
-          <div style={{fontWeight:600,fontSize:12,color:"#7dd3fc",marginBottom:8}}>
+        <div style={{...S.card,background:"var(--bg-app)",padding:16}}>
+          <div style={{fontWeight:600,fontSize:12,color:"var(--accent-blue)",marginBottom:8}}>
             🔗 Practice Connection String
           </div>
-          <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}>
+          <div style={{fontSize:10,color:"var(--text-secondary)",marginBottom:12}}>
             Give this to the patient so they can add your practice in their portal. They manage their own keys — no access code needed.
           </div>
-          <div style={{...S.mono,background:"#1e293b",padding:12,fontSize:9,marginBottom:12,userSelect:"all" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
+          <div style={{...S.mono,background:"var(--bg-card)",padding:12,fontSize:9,marginBottom:12,userSelect:"all" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
             {connectionString}
           </div>
         </div>
@@ -1726,19 +1857,19 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
     };
     const selfKeyedParent=familyCreated.parent.keySource==="self";
     return(
-      <div style={{...S.card,border:"1px solid #166534",background:"#052e16"}}>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"#4ade80"}}>✓ Family Created — {familyCreated.children.length} child{familyCreated.children.length>1?"ren":""}</div>
+      <div style={{...S.card,border:"1px solid var(--tint-green-border)",background:"var(--tint-green)"}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:"var(--accent-green)"}}>✓ Family Created — {familyCreated.children.length} child{familyCreated.children.length>1?"ren":""}</div>
 
         {/* Parent */}
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:13,color:"#e2e8f0",fontWeight:600}}>{familyCreated.parent.name} <span style={{fontSize:10,color:"#64748b"}}>(Parent{selfKeyedParent?" — self-keyed":""})</span></div>
+          <div style={{fontSize:13,color:"var(--text-primary)",fontWeight:600}}>{familyCreated.parent.name} <span style={{fontSize:10,color:"var(--text-muted)"}}>(Parent{selfKeyedParent?" — self-keyed":""})</span></div>
           {selfKeyedParent?(
             <div style={{fontSize:10,color:"#7dd3fc",marginTop:4}}>npub: <span style={{fontFamily:"monospace"}}>{familyCreated.parent.npub?.substring(0,24)}...</span></div>
           ):(
-            <div style={{...S.card,background:"#0f172a",padding:12,marginTop:8}}>
+            <div style={{...S.card,background:"var(--bg-app)",padding:12,marginTop:8}}>
               <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Parent Access Code</div>
-              <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{familyCreated.parentNsec}</div>
-              <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {familyCreated.parent.npub?.substring(0,24)}...</div>
+              <div style={{...S.mono,background:"var(--bg-card)",padding:8,fontSize:10,userSelect:"all" as const}}>{familyCreated.parentNsec}</div>
+              <div style={{fontSize:9,color:"var(--text-label)",marginTop:4}}>npub: {familyCreated.parent.npub?.substring(0,24)}...</div>
               <Btn small col="#fbbf24" style={{marginTop:6}} onClick={()=>{
                 navigator.clipboard.writeText(`${familyCreated.parent.name}\nnsec: ${familyCreated.parentNsec}\nnpub: ${familyCreated.parent.npub||""}`);
                 alert("Parent keys (nsec + npub) copied");
@@ -1750,11 +1881,11 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
         {/* Children */}
         {familyCreated.children.map((c,i)=>(
           <div key={c.patient.id} style={{marginBottom:12}}>
-            <div style={{fontSize:12,color:"#e2e8f0",fontWeight:600}}>{c.patient.name} <span style={{fontSize:10,color:"#64748b"}}>(Child • {c.patient.dob})</span></div>
-            <div style={{...S.card,background:"#0f172a",padding:12,marginTop:4}}>
+            <div style={{fontSize:12,color:"var(--text-primary)",fontWeight:600}}>{c.patient.name} <span style={{fontSize:10,color:"var(--text-muted)"}}>(Child • {c.patient.dob})</span></div>
+            <div style={{...S.card,background:"var(--bg-app)",padding:12,marginTop:4}}>
               <div style={{fontSize:10,fontWeight:600,color:"#fbbf24",marginBottom:4}}>🔑 Access Code</div>
-              <div style={{...S.mono,background:"#1e293b",padding:8,fontSize:10,userSelect:"all" as const}}>{c.nsec}</div>
-              <div style={{fontSize:9,color:"#475569",marginTop:4}}>npub: {c.patient.npub?.substring(0,24)}...</div>
+              <div style={{...S.mono,background:"var(--bg-card)",padding:8,fontSize:10,userSelect:"all" as const}}>{c.nsec}</div>
+              <div style={{fontSize:9,color:"var(--text-label)",marginTop:4}}>npub: {c.patient.npub?.substring(0,24)}...</div>
               <Btn small col="#fbbf24" style={{marginTop:6}} onClick={()=>{
                 navigator.clipboard.writeText(`${c.patient.name}\nnsec: ${c.nsec}\nnpub: ${c.patient.npub||""}`);
                 alert(`${c.patient.name} keys (nsec + npub) copied`);
@@ -1763,7 +1894,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
           </div>
         ))}
 
-        <div style={{fontSize:10,color:form.storeNsec?"#4ade80":"#f87171",fontStyle:"italic",marginBottom:12}}>
+        <div style={{fontSize:10,color:form.storeNsec?"var(--accent-green)":"#f87171",fontStyle:"italic",marginBottom:12}}>
           {form.storeNsec
             ? "✓ Access codes stored locally (can be revealed in Portal Access panel)"
             : "⚠️ These codes are shown once and will NOT be stored. Save them now."}
@@ -1787,15 +1918,15 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
 
   // ── The form ──
   return(
-    <div style={{...S.card,border:"1px solid #1e3a5f"}}>
+    <div style={{...S.card,border:"1px solid var(--border-accent)"}}>
       <div style={{fontWeight:700,fontSize:14,marginBottom:16}}>➕ Add New Patient</div>
  
       {/* Mode toggle */}
-      <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"1px solid #334155"}}>
+      <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:8,overflow:"hidden",border:"1px solid var(--border)"}}>
         {([["new","New Patient"],["family","New Family"],["existing","Existing Nostr Patient"]] as const).map(([m,label])=>(
           <button key={m} onClick={()=>{setMode(m);setNpubError("");}} style={{
             flex:1,padding:"8px 12px",fontSize:12,fontWeight:600,
-            background:mode===m?"#1e3a5f":"#0f172a",color:mode===m?"#7dd3fc":"#64748b",
+            background:mode===m?"var(--tab-selected-bg)":"var(--bg-app)",color:mode===m?"var(--tab-selected-text)":"var(--text-muted)",
             border:"none",cursor:"pointer",fontFamily:"inherit",
             transition:"all 0.15s",
           }}>{label}</button>
@@ -1805,11 +1936,11 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
  
       {/* npub field (existing mode only) */}
       {mode==="existing"&&(
-        <div style={{marginBottom:12,padding:12,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:8}}>
-          <div style={{fontSize:11,fontWeight:600,color:"#7dd3fc",marginBottom:8}}>
+        <div style={{marginBottom:12,padding:12,background:"var(--bg-inset)",border:"1px solid var(--border-accent)",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"var(--accent-blue)",marginBottom:8}}>
             🔑 Patient's Public Key
           </div>
-          <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+          <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:8}}>
             The patient provides their npub. You never need their secret key.
           </div>
           <textarea
@@ -1860,11 +1991,11 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
  
       {/* Existing nsec field (new mode only) */}
       {mode==="new"&&(
-        <div style={{marginTop:16,padding:12,background:"#1e1040",border:"1px solid #7c3aed",borderRadius:8}}>
-          <div style={{fontSize:11,fontWeight:600,color:"#c4b5fd",marginBottom:8}}>
+        <div style={{marginTop:16,padding:12,background:"var(--tint-purple)",border:"1px solid var(--tint-purple-border)",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"var(--accent-purple)",marginBottom:8}}>
             🔑 Existing Patient Key (Optional)
           </div>
-          <div style={{fontSize:10,color:"#a78bfa",marginBottom:8}}>
+          <div style={{fontSize:10,color:"var(--accent-purple-sub)",marginBottom:8}}>
             If patient already has an nsec from billing, paste it here. Leave blank to generate new keys.
           </div>
           <textarea
@@ -1887,7 +2018,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
             id="storeNsec"
             style={{accentColor:"#f59e0b",width:16,height:16}}
           />
-          <label htmlFor="storeNsec" style={{fontSize:11,color:"#94a3b8",cursor:"pointer"}}>
+          <label htmlFor="storeNsec" style={{fontSize:11,color:"var(--text-secondary)",cursor:"pointer"}}>
             Store access code locally for recovery (less secure, more convenient)
           </label>
         </div>
@@ -1895,11 +2026,11 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
  
       {/* Parent npub field (family mode — optional, for self-keyed parent) */}
       {mode==="family"&&(
-        <div style={{marginTop:12,padding:12,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:8}}>
-          <div style={{fontSize:11,fontWeight:600,color:"#7dd3fc",marginBottom:4}}>
+        <div style={{marginTop:12,padding:12,background:"var(--bg-inset)",border:"1px solid var(--border-accent)",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"var(--accent-blue)",marginBottom:4}}>
             🔑 Parent's Nostr Key (Optional)
           </div>
-          <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+          <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:8}}>
             If the parent already has an npub, paste it here. Leave blank to generate new keys.
           </div>
           <textarea
@@ -1915,8 +2046,8 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
 
       {/* Children (family mode) */}
       {mode==="family"&&(
-        <div style={{marginTop:16,padding:12,background:"#0f1a10",border:"1px solid #166534",borderRadius:8}}>
-          <div style={{fontSize:11,fontWeight:600,color:"#4ade80",marginBottom:10}}>
+        <div style={{marginTop:16,padding:12,background:"var(--tint-green)",border:"1px solid var(--tint-green-border)",borderRadius:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"var(--accent-green)",marginBottom:10}}>
             👶 Children ({children.length})
           </div>
           {children.map((c,i)=>(
@@ -1948,7 +2079,7 @@ function AddPatientForm({onAdd,onCancel,keys,relay}:{onAdd:(p:Patient)=>void;onC
             </div>
           ))}
           <button onClick={()=>setChildren([...children,{name:"",dob:"",sex:"female"}])} style={{
-            fontSize:11,color:"#4ade80",background:"none",border:"1px dashed #166534",borderRadius:6,
+            fontSize:11,color:"var(--accent-green)",background:"none",border:"1px dashed var(--tint-green-border)",borderRadius:6,
             padding:"6px 12px",cursor:"pointer",fontFamily:"inherit",marginTop:4,width:"100%"
           }}>+ Add Child</button>
         </div>
@@ -2037,7 +2168,7 @@ function LabSummaryCard({patient,keys,relay,onNavigate}:{
   if(summary.pending===0&&unrevCritical.length===0&&unrevAbnormal.length===0)return null;
 
   return(
-    <div style={{...S.card,marginBottom:16,borderLeft:"3px solid #4ade80"}}>
+    <div style={{...S.card,marginBottom:16,borderLeft:"3px solid var(--accent-green)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{fontWeight:600,fontSize:13}}>🧪 Lab Results</div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -2045,10 +2176,10 @@ function LabSummaryCard({patient,keys,relay,onNavigate}:{
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <button onClick={()=>onNavigate("labs")}
                 style={{background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-                <Badge t={`⚠ ${unrevCritical.length} critical`} col="#f87171" bg="#1c0a0a"/>
+                <Badge t={`⚠ ${unrevCritical.length} critical`} col="#f87171" bg="var(--tint-red)"/>
               </button>
               <button onClick={(e)=>{e.stopPropagation();markAllReviewed(unrevCritical);}} title="Mark critical results reviewed"
-                style={{background:"transparent",border:"1px solid #334155",color:"#4ade80",
+                style={{background:"transparent",border:"1px solid var(--border)",color:"var(--accent-green)",
                   cursor:"pointer",fontSize:10,padding:"2px 6px",borderRadius:5,fontFamily:"inherit",lineHeight:1}}>
                 ✓
               </button>
@@ -2058,10 +2189,10 @@ function LabSummaryCard({patient,keys,relay,onNavigate}:{
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <button onClick={()=>onNavigate("labs")}
                 style={{background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-                <Badge t={`${unrevAbnormal.length} abnormal`} col="#fbbf24" bg="#1c1200"/>
+                <Badge t={`${unrevAbnormal.length} abnormal`} col="#fbbf24" bg="var(--tint-amber)"/>
               </button>
               <button onClick={(e)=>{e.stopPropagation();markAllReviewed(unrevAbnormal);}} title="Mark abnormal results reviewed"
-                style={{background:"transparent",border:"1px solid #334155",color:"#4ade80",
+                style={{background:"transparent",border:"1px solid var(--border)",color:"var(--accent-green)",
                   cursor:"pointer",fontSize:10,padding:"2px 6px",borderRadius:5,fontFamily:"inherit",lineHeight:1}}>
                 ✓
               </button>
@@ -2070,7 +2201,7 @@ function LabSummaryCard({patient,keys,relay,onNavigate}:{
           {summary.pending>0&&(
             <button onClick={()=>onNavigate("orders")}
               style={{background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-              <Badge t={`${summary.pending} pending`} col="#f59e0b" bg="#1c1200"/>
+              <Badge t={`${summary.pending} pending`} col="#f59e0b" bg="var(--tint-amber)"/>
             </button>
           )}
         </div>
@@ -2122,12 +2253,12 @@ function BillingStatusCard({patient}:{patient:Patient}){
   
   if(loading)return(
     <div style={{...S.card,marginBottom:16}}>
-      <div style={{color:"#64748b",fontSize:13}}>Loading billing status...</div>
+      <div style={{color:"var(--text-muted)",fontSize:13}}>Loading billing status...</div>
     </div>
   );
 
   if(error)return(
-    <div style={{...S.card,marginBottom:16,border:"1px solid #f59e0b",background:"#1c1408"}}>
+    <div style={{...S.card,marginBottom:16,border:"1px solid var(--tint-amber-border)",background:"var(--tint-amber)"}}>
       <div style={{color:"#f59e0b",fontSize:13}}>⚠️ {error}</div>
     </div>
   );
@@ -2136,8 +2267,8 @@ function BillingStatusCard({patient}:{patient:Patient}){
 
   const isLapsed=billing.status==="lapsed";
   const isDelinquent=billing.status==="delinquent";
-  const statusColor=isLapsed?"#f87171":isDelinquent?"#f59e0b":"#4ade80";
-  const statusBg=isLapsed?"#1c0a0a":isDelinquent?"#1c1408":"#0a1c14";
+  const statusColor=isLapsed?"#f87171":isDelinquent?"#f59e0b":"var(--accent-green)";
+  const statusBg=isLapsed?"var(--tint-red)":isDelinquent?"var(--tint-amber)":"var(--tint-green)";
   const balance = typeof billing.balance === 'string' ? parseFloat(billing.balance) : billing.balance;
   const monthlyFee = typeof billing.monthlyFee === 'string' ? parseFloat(billing.monthlyFee) : billing.monthlyFee;
 
@@ -2153,7 +2284,7 @@ function BillingStatusCard({patient}:{patient:Patient}){
               Outstanding Balance: ${balance.toFixed(2)}
             </div>
           )}
-          <div style={{color:"#64748b",fontSize:11}}>
+          <div style={{color:"var(--text-muted)",fontSize:11}}>
             Monthly Fee: ${monthlyFee?.toFixed(2) || "150.00"}
             {billing.lastPayment&&` • Last Payment: ${new Date(billing.lastPayment).toLocaleDateString()}`}
             {billing.memberSince&&` • Member Since: ${new Date(billing.memberSince).toLocaleDateString()}`}
@@ -2182,7 +2313,7 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
   const [rekeyNsec,setRekeyNsec]=useState("");
 
   if(editing) return(
-    <div style={{...S.card,border:"1px solid #1e3a5f"}}>
+    <div style={{...S.card,border:"1px solid var(--border-accent)"}}>
       <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>✏️ Edit Demographics</div>
       <div style={S.grid2}>
         <div><label style={S.lbl}>Full Name</label>
@@ -2381,16 +2512,16 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
 
       {/* Portal Access section — toggled by showAccess */}
       {showAccess&&(
-        <div style={{background:"#1a1a2e",border:"1px solid #334155",borderRadius:8,padding:12,marginBottom:12}}>
+        <div style={{background:"#1a1a2e",border:"1px solid var(--border)",borderRadius:8,padding:12,marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:600,color:"#fbbf24",marginBottom:8}}>🔑 Portal Access</div>
  
           {/* Self-keyed patient: show connection string, no re-key */}
           {patient.keySource==="self"?(
             <>
-              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+              <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:8}}>
                 This patient manages their own keys. Share the connection string so they can add your practice in their portal.
               </div>
-              <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:9,marginBottom:8,userSelect:"all" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
+              <div style={{...S.mono,background:"var(--bg-app)",padding:10,fontSize:9,marginBottom:8,userSelect:"all" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
                 {JSON.stringify({practice_name:PRACTICE_NAME,relay:RELAY_URL,practice_pk:PRACTICE_PUBKEY,...(BILLING_URL?{billing_api:BILLING_URL}:{}),...(CALENDAR_URL?{calendar_api:CALENDAR_URL}:{})},null,2)}
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,marginBottom:8}}>
@@ -2407,7 +2538,7 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
           ):(
             <>
               {/* Practice-keyed patient: nsec management + re-key */}
-              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+              <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:8}}>
                 {patient.nsecStored
                   ? "Access code is stored locally. You can reveal it or clear it below."
                   : "Access code was not stored. Use Re-key if the patient needs a new one."}
@@ -2415,9 +2546,9 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
  
               {/* Reveal stored nsec — admin/practice owner only */}
               {patient.nsecStored && patient.nsec && canDo("admin") && (
-                <div style={{background:"#1e1040",border:"1px solid #7c3aed",borderRadius:8,padding:10,marginBottom:10}}>
+                <div style={{background:"var(--tint-purple)",border:"1px solid var(--tint-purple-border)",borderRadius:8,padding:10,marginBottom:10}}>
                   <div style={{fontSize:11,fontWeight:600,color:"#c4b5fd",marginBottom:6}}>🔑 Stored Access Code</div>
-                  <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
+                  <div style={{...S.mono,background:"var(--bg-app)",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
                     {patient.nsec}
                   </div>
                   <div style={{display:"flex",gap:8}}>
@@ -2436,9 +2567,9 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
  
               {/* Show new nsec if re-key just happened */}
               {rekeyNsec&&(
-                <div style={{background:"#052e16",border:"1px solid #166534",borderRadius:8,padding:12,marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#4ade80",marginBottom:6}}>🔑 New Access Code (copy now!)</div>
-                  <div style={{...S.mono,background:"#0f172a",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
+                <div style={{background:"var(--tint-green)",border:"1px solid var(--tint-green-border)",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"var(--accent-green)",marginBottom:6}}>🔑 New Access Code (copy now!)</div>
+                  <div style={{...S.mono,background:"var(--bg-app)",padding:10,fontSize:10,marginBottom:6,userSelect:"all" as const}}>
                     {rekeyNsec}
                   </div>
                   <div style={{fontSize:10,color:"#f87171",fontStyle:"italic",marginBottom:8}}>
@@ -2459,7 +2590,7 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
                 <Btn small col="#f59e0b" onClick={handleRekey} disabled={!canDo("admin")} title="Generate a new keypair for this patient. Re-encrypts all their events with the new key and updates the relay whitelist.">
                   🔄 Re-key patient
                 </Btn>
-                {!canDo("admin")&&<span style={{fontSize:10,color:"#64748b"}}>Doctor only</span>}
+                {!canDo("admin")&&<span style={{fontSize:10,color:"var(--text-muted)"}}>Doctor only</span>}
               </div>
             </>
           )}
@@ -2467,9 +2598,9 @@ function DemographicsCard({patient,onUpdated,keys,relay}:{patient:Patient;onUpda
       )}
       
       {rows.map(([k,v])=>(
-        <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f172a"}}>
-          <span style={{color:"#475569",fontSize:12}}>{k}</span>
-          <span style={{color:"#e2e8f0",fontSize:12,fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{v}</span>
+        <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid var(--border-subtle)"}}>
+          <span style={{color:"var(--text-label)",fontSize:12}}>{k}</span>
+          <span style={{color:"var(--text-primary)",fontSize:12,fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{v}</span>
         </div>
       ))}
  
@@ -2551,26 +2682,26 @@ function GuardianSection({patient,onUpdated,keys,relay}:{patient:Patient;onUpdat
   if(!isGuardian&&childGuardians.length===0&&!canDo("admin")) return null;
 
   return(
-    <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid #1e293b"}}>
+    <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid var(--border-subtle)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,cursor:"pointer"}}
         onClick={()=>setExpanded(!expanded)}>
-        <div style={{fontWeight:600,fontSize:13,color:"#94a3b8",display:"flex",alignItems:"center",gap:6}}>
+        <div style={{fontWeight:600,fontSize:13,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:6}}>
           👨‍👩‍👧 Family Links
           {isGuardian&&<span style={{fontSize:10,background:"#164e63",color:"#22d3ee",padding:"1px 6px",borderRadius:10,fontWeight:600}}>{guardianChildren.length} child{guardianChildren.length!==1?"ren":""}</span>}
           {childGuardians.length>0&&<span style={{fontSize:10,background:"#1c1917",color:"#f59e0b",padding:"1px 6px",borderRadius:10,fontWeight:600}}>has guardian</span>}
         </div>
-        <span style={{fontSize:12,color:"#475569"}}>{expanded?"▾":"▸"}</span>
+        <span style={{fontSize:12,color:"var(--text-label)"}}>{expanded?"▾":"▸"}</span>
       </div>
       {expanded&&(
         <div style={{fontSize:12}}>
           {isGuardian&&(
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:600,color:"#475569",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Guardian of</div>
+              <div style={{fontSize:10,fontWeight:600,color:"var(--text-label)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Guardian of</div>
               {guardianChildren.map(child=>(
-                <div key={child.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#0f172a",borderRadius:6,marginBottom:4}}>
+                <div key={child.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"var(--bg-app)",borderRadius:6,marginBottom:4}}>
                   <div>
-                    <span style={{fontWeight:600,color:"#e2e8f0"}}>{child.name}</span>
-                    {child.dob&&<span style={{color:"#64748b",marginLeft:8,fontSize:11}}>{ageFromDob(child.dob).display}</span>}
+                    <span style={{fontWeight:600,color:"var(--text-primary)"}}>{child.name}</span>
+                    {child.dob&&<span style={{color:"var(--text-muted)",marginLeft:8,fontSize:11}}>{ageFromDob(child.dob).display}</span>}
                   </div>
                   {canDo("admin")&&<button onClick={()=>handleUnlinkChild(child.id)} style={{fontSize:10,color:"#ef4444",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>✕</button>}
                 </div>
@@ -2580,10 +2711,10 @@ function GuardianSection({patient,onUpdated,keys,relay}:{patient:Patient;onUpdat
           )}
           {childGuardians.length>0&&(
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:600,color:"#475569",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Guardian(s)</div>
+              <div style={{fontSize:10,fontWeight:600,color:"var(--text-label)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Guardian(s)</div>
               {childGuardians.map(g=>(
-                <div key={g.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#0f172a",borderRadius:6,marginBottom:4}}>
-                  <span style={{fontWeight:600,color:"#e2e8f0"}}>{g.name}</span>
+                <div key={g.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"var(--bg-app)",borderRadius:6,marginBottom:4}}>
+                  <span style={{fontWeight:600,color:"var(--text-primary)"}}>{g.name}</span>
                   <span style={{fontSize:10,color:"#22d3ee",fontFamily:"'IBM Plex Mono',monospace"}}>{g.npub?.substring(0,20)}...</span>
                 </div>
               ))}
@@ -2594,15 +2725,15 @@ function GuardianSection({patient,onUpdated,keys,relay}:{patient:Patient;onUpdat
               {!linking?(
                 <button onClick={()=>setLinking(true)} style={{fontSize:11,fontWeight:600,color:"#f7931a",background:"#f7931a10",border:"1px solid #f7931a40",borderRadius:6,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit"}}>+ Link child patient</button>
               ):(
-                <div style={{background:"#0f172a",border:"1px solid #1e3a5f",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#94a3b8",marginBottom:6}}>Select a patient to link as child:</div>
-                  <select value={selectedChildId} onChange={e=>setSelectedChildId(e.target.value)} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12,fontFamily:"inherit",marginBottom:8,cursor:"pointer"}}>
+                <div style={{background:"var(--bg-app)",border:"1px solid var(--border-accent)",borderRadius:8,padding:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"var(--text-secondary)",marginBottom:6}}>Select a patient to link as child:</div>
+                  <select value={selectedChildId} onChange={e=>setSelectedChildId(e.target.value)} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg-card)",color:"var(--text-primary)",fontSize:12,fontFamily:"inherit",marginBottom:8,cursor:"pointer"}}>
                     <option value="">Choose patient...</option>
                     {linkableChildren.map(p=><option key={p.id} value={p.id}>{p.name}{p.dob?` (${ageFromDob(p.dob).display})`:""}</option>)}
                   </select>
                   <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>{if(selectedChildId)handleLinkChild(selectedChildId);}} disabled={!selectedChildId||publishing} style={{flex:1,padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:700,background:selectedChildId?"#f7931a":"#334155",color:selectedChildId?"#fff":"#64748b",border:"none",cursor:selectedChildId?"pointer":"default",fontFamily:"inherit",opacity:publishing?0.5:1}}>{publishing?"Publishing grant...":"Link & Publish Grant"}</button>
-                    <button onClick={()=>{setLinking(false);setSelectedChildId("");}} style={{padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:500,background:"transparent",color:"#64748b",border:"1px solid #334155",cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                    <button onClick={()=>{if(selectedChildId)handleLinkChild(selectedChildId);}} disabled={!selectedChildId||publishing} style={{flex:1,padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:700,background:selectedChildId?"#f7931a":"var(--border)",color:selectedChildId?"#fff":"var(--text-muted)",border:"none",cursor:selectedChildId?"pointer":"default",fontFamily:"inherit",opacity:publishing?0.5:1}}>{publishing?"Publishing grant...":"Link & Publish Grant"}</button>
+                    <button onClick={()=>{setLinking(false);setSelectedChildId("");}} style={{padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:500,background:"transparent",color:"var(--text-muted)",border:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
                   </div>
                 </div>
               )}
@@ -2645,26 +2776,26 @@ function UpcomingAppointments({patient}:{patient:Patient}){
   },[patient.npub]);
 
   const typeLabel=(t:string)=>({in_person:"In Person",phone:"Phone",video:"Video"}[t]||t);
-  const statusColor=(s:string)=>s==="confirmed"?"#22c55e":s==="pending"?"#f59e0b":"#64748b";
+  const statusColor=(s:string)=>s==="confirmed"?"#22c55e":s==="pending"?"#f59e0b":"var(--text-muted)";
 
   return(
     <div style={{...S.card,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14}}>📅 Upcoming Appointments</div>
-        {!loading&&<Badge t={`${appts.length} scheduled`} col="#7dd3fc" bg="#0c1a2e"/>}
+        {!loading&&<Badge t={`${appts.length} scheduled`} col="#7dd3fc" bg="var(--bg-inset)"/>}
       </div>
 
-      {loading&&<div style={{color:"#475569",fontSize:12,padding:"8px 0"}}>Loading appointments…</div>}
+      {loading&&<div style={{color:"var(--text-label)",fontSize:12,padding:"8px 0"}}>Loading appointments…</div>}
 
       {!loading&&appts.length===0&&(
-        <div style={{color:"#334155",fontSize:12,padding:"8px 0",textAlign:"center"}}>
+        <div style={{color:"var(--text-faint)",fontSize:12,padding:"8px 0",textAlign:"center"}}>
           No upcoming appointments scheduled
         </div>
       )}
 
       {appts.map((a:any)=>(
         <div key={a.id} style={{
-          background:"#0f172a",border:"1px solid #1e293b",borderLeft:`3px solid ${statusColor(a.status)}`,
+          background:"var(--bg-app)",border:"1px solid var(--border-subtle)",borderLeft:`3px solid ${statusColor(a.status)}`,
           borderRadius:8,padding:"12px 14px",marginBottom:8
         }}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -2672,14 +2803,14 @@ function UpcomingAppointments({patient}:{patient:Patient}){
               <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>
                 {fmtApptDate(a.date)}
               </div>
-              <div style={{color:"#64748b",fontSize:11}}>
+              <div style={{color:"var(--text-muted)",fontSize:11}}>
                 {fmtApptTime(a.start_time)} – {fmtApptTime(a.end_time)}
               </div>
-              {a.notes&&<div style={{color:"#94a3b8",fontSize:11,marginTop:4}}>{a.notes}</div>}
+              {a.notes&&<div style={{color:"var(--text-secondary)",fontSize:11,marginTop:4}}>{a.notes}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
               <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,
-                background:"#1e293b",color:"#7dd3fc",textTransform:"uppercase"}}>
+                background:"var(--bg-card)",color:"#7dd3fc",textTransform:"uppercase"}}>
                 {typeLabel(a.appt_type)}
               </span>
               <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,
@@ -2815,8 +2946,8 @@ function EncounterHistory({patient,keys,relay}:{
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14}}>📋 Encounter History</div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {loading&&<span style={{color:"#475569",fontSize:11}}>Loading…</span>}
-          <Badge t={`${encounters.length} visits`} col="#7dd3fc" bg="#0c1a2e"/>
+          {loading&&<span style={{color:"var(--text-label)",fontSize:11}}>Loading…</span>}
+          <Badge t={`${encounters.length} visits`} col="#7dd3fc" bg="var(--bg-inset)"/>
           <Btn small onClick={load} col="#475569" disabled={loading||!keys}>
             ↻ Refresh
           </Btn>
@@ -2824,7 +2955,7 @@ function EncounterHistory({patient,keys,relay}:{
       </div>
 
       {encounters.length===0&&!loading&&(
-        <div style={{...S.card,color:"#334155",textAlign:"center",padding:24}}>
+        <div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:24}}>
           No encounters found for this patient yet
         </div>
       )}
@@ -2846,39 +2977,39 @@ function EncounterHistory({patient,keys,relay}:{
               onClick={()=>setOpen(o=>o===enc.event.id?null:enc.event.id)}>
               <div>
                 <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{enc.chief}{authoredBy?` — ${authoredBy}`:""}</div>
-                <div style={{color:"#475569",fontSize:11}}>
+                <div style={{color:"var(--text-label)",fontSize:11}}>
                   {fmtDate(enc.event.created_at)} · {fmtTime(enc.event.created_at)}
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                {vr?.valid&&<Badge t="✓ verified" col="#4ade80" bg="#052e16"/>}
-                {vr&&!vr.valid&&<Badge t="✗ invalid" col="#f87171" bg="#450a0a"/>}
+                {vr?.valid&&<Badge t="✓ verified" col="var(--accent-green)" bg="var(--tint-green)"/>}
+                {vr&&!vr.valid&&<Badge t="✗ invalid" col="#f87171" bg="var(--tint-red)"/>}
                 {encAddendums.length>0&&<Badge t={`${encAddendums.length} addendum${encAddendums.length>1?"s":""}`} col="#fbbf24" bg="#1c1a05"/>}
                 {isNurseNote
-                  ?<Badge t="📋 note" col="#38bdf8" bg="#0c1a2e"/>
-                  :<Badge t="🔒 signed" col="#a78bfa" bg="#1e1040"/>}
-                <span style={{color:"#334155"}}>{isOpen?"▲":"▼"}</span>
+                  ?<Badge t="📋 note" col="#38bdf8" bg="var(--bg-inset)"/>
+                  :<Badge t="🔒 signed" col="#a78bfa" bg="var(--tint-purple)"/>}
+                <span style={{color:"var(--text-faint)"}}>{isOpen?"▲":"▼"}</span>
               </div>
             </div>
 
             {/* Expanded view */}
             {isOpen&&(
-              <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #0f172a"}}>
+              <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border-subtle)"}}>
 
                 {/* Note content */}
-                <div style={{background:"#0a1628",borderRadius:8,padding:"12px 14px",
-                  color:"#94a3b8",fontSize:12,lineHeight:1.9,whiteSpace:"pre-wrap",fontFamily:"monospace"}}>
+                <div style={{background:"var(--bg-deep)",borderRadius:8,padding:"12px 14px",
+                  color:"var(--text-secondary)",fontSize:12,lineHeight:1.9,whiteSpace:"pre-wrap",fontFamily:"monospace"}}>
                   {enc.note||"No note content"}
                 </div>
 
                 {/* Addendums */}
                 {encAddendums.map((add,ai)=>(
-                  <div key={add.eventId} style={{marginTop:8,background:"#0c1a2e",borderRadius:8,
+                  <div key={add.eventId} style={{marginTop:8,background:"var(--bg-inset)",borderRadius:8,
                     padding:"10px 14px",borderLeft:"3px solid #fbbf24"}}>
                     <div style={{fontSize:10,color:"#fbbf24",fontWeight:600,marginBottom:4}}>
                       ADDENDUM — {fmtDate(add.date)} · {fmtTime(add.date)}
                     </div>
-                    <div style={{color:"#94a3b8",fontSize:12,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"monospace"}}>
+                    <div style={{color:"var(--text-secondary)",fontSize:12,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"monospace"}}>
                       {add.text}
                     </div>
                   </div>
@@ -2899,7 +3030,7 @@ function EncounterHistory({patient,keys,relay}:{
 
                 {/* Addendum input */}
                 {addendumTarget===enc.event.id&&(
-                  <div style={{marginTop:8,padding:10,background:"#0f172a",borderRadius:8,border:"1px solid #fbbf2440"}}>
+                  <div style={{marginTop:8,padding:10,background:"var(--bg-app)",borderRadius:8,border:"1px solid #fbbf2440"}}>
                     <div style={{fontSize:11,color:"#fbbf24",fontWeight:600,marginBottom:6}}>
                       Append Addendum (original note remains immutable)
                     </div>
@@ -2917,12 +3048,12 @@ function EncounterHistory({patient,keys,relay}:{
 
                 {/* Signature verification panel */}
                 {vr&&(
-                  <div style={{marginTop:10,padding:"10px 12px",background:vr.valid?"#052e1680":"#450a0a80",
-                    borderRadius:8,border:`1px solid ${vr.valid?"#166534":"#991b1b"}`}}>
-                    <div style={{fontSize:11,fontWeight:600,color:vr.valid?"#4ade80":"#f87171",marginBottom:6}}>
+                  <div style={{marginTop:10,padding:"10px 12px",background:vr.valid?"var(--tint-green)":"var(--tint-red)",
+                    borderRadius:8,border:`1px solid ${vr.valid?"var(--tint-green-border)":"var(--tint-red-border)"}`}}>
+                    <div style={{fontSize:11,fontWeight:600,color:vr.valid?"var(--accent-green)":"#f87171",marginBottom:6}}>
                       {vr.valid?"✓ Cryptographic Signature Valid":"✗ Signature Verification Failed"}
                     </div>
-                    <div style={{fontSize:10,color:"#94a3b8",lineHeight:1.8,fontFamily:"monospace"}}>
+                    <div style={{fontSize:10,color:"var(--text-secondary)",lineHeight:1.8,fontFamily:"monospace"}}>
                       <div>Event ID: {enc.event.id}</div>
                       <div>Computed: {vr.computedId}</div>
                       <div>ID Match: {vr.idMatch?"✓ yes":"✗ no"}</div>
@@ -2941,7 +3072,7 @@ function EncounterHistory({patient,keys,relay}:{
                 )}
 
                 {/* Event metadata (always shown) */}
-                <div style={{marginTop:8,color:"#334155",fontSize:10}}>
+                <div style={{marginTop:8,color:"var(--text-faint)",fontSize:10}}>
                   Event ID: {enc.event.id.slice(0,32)}… · Signed {fmtDate(enc.event.created_at)}
                 </div>
               </div>
@@ -3038,28 +3169,28 @@ function DotPhrasePopup({ query, position, onSelect, onClose }: {
   return (
     <div style={{
       position: "fixed", top: position.top, left: position.left, zIndex: 1000,
-      background: "#1e293b", border: "1px solid #334155", borderRadius: 8,
+      background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8,
       maxHeight: 240, overflowY: "auto", minWidth: 280, maxWidth: 400,
-      boxShadow: "0 4px 16px rgba(0,0,0,0.5)", fontSize: 12,
+      boxShadow: "0 4px 16px var(--shadow-heavy)", fontSize: 12,
     }}>
-      <div style={{ padding: "6px 10px", color: "#475569", fontSize: 10, borderBottom: "1px solid #334155", fontWeight: 600 }}>
+      <div style={{ padding: "6px 10px", color: "var(--text-label)", fontSize: 10, borderBottom: "1px solid var(--border)", fontWeight: 600 }}>
         DOT PHRASES — Tab/Enter to expand, Esc to close
       </div>
       {matches.map((p, i) => (
         <div key={p.trigger} onClick={() => onSelect(p)}
           style={{
             padding: "7px 10px", cursor: "pointer",
-            background: i === selected ? "#334155" : "transparent",
+            background: i === selected ? "var(--bg-hover)" : "transparent",
             display: "flex", justifyContent: "space-between", alignItems: "center",
-            borderBottom: "1px solid #0f172a",
+            borderBottom: "1px solid var(--border-subtle)",
           }}
           onMouseEnter={() => setSelected(i)}
         >
           <div>
             <span style={{ color: "#0ea5e9", fontFamily: "monospace" }}>.{p.trigger}</span>
-            <span style={{ color: "#94a3b8", marginLeft: 8 }}>{p.label}</span>
+            <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>{p.label}</span>
           </div>
-          {p.builtin && <span style={{ color: "#334155", fontSize: 9 }}>BUILT-IN</span>}
+          {p.builtin && <span style={{ color: "var(--text-faint)", fontSize: 9 }}>BUILT-IN</span>}
         </div>
       ))}
     </div>
@@ -3111,14 +3242,14 @@ function DotPhraseManager() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 13 }}>⚡ Dot Phrases</div>
-          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Type <span style={{ fontFamily: "monospace", color: "#0ea5e9" }}>.trigger</span> in any note to expand templates</div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Type <span style={{ fontFamily: "monospace", color: "#0ea5e9" }}>.trigger</span> in any note to expand templates</div>
         </div>
         <Btn small solid={!creating} col="#0ea5e9" onClick={() => { setCreating(!creating); setEditing(null); }}>
           {creating ? "Cancel" : "+ New Phrase"}
         </Btn>
       </div>
       {creating && (
-        <div style={{ background: "#0f172a", borderRadius: 8, padding: 12, marginBottom: 12, border: "1px solid #334155" }}>
+        <div style={{ background: "var(--bg-app)", borderRadius: 8, padding: 12, marginBottom: 12, border: "1px solid var(--border)" }}>
           <div style={S.grid2}>
             <div><label style={S.lbl}>Trigger (no dot)</label><input value={form.trigger} onChange={e => setForm(f => ({ ...f, trigger: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "") }))} style={S.input} placeholder="e.g. earinfection" /></div>
             <div><label style={S.lbl}>Label</label><input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} style={S.input} placeholder="e.g. Ear Infection Visit" /></div>
@@ -3131,7 +3262,7 @@ function DotPhraseManager() {
         </div>
       )}
       {editing && (
-        <div style={{ background: "#0f172a", borderRadius: 8, padding: 12, marginBottom: 12, border: "1px solid #f59e0b" }}>
+        <div style={{ background: "var(--bg-app)", borderRadius: 8, padding: 12, marginBottom: 12, border: "1px solid #f59e0b" }}>
           <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 8, fontWeight: 600 }}>Editing: .{editing.trigger} — {editing.label}</div>
           <div style={{ marginBottom: 8 }}><label style={S.lbl}>Label</label><input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} style={S.input} /></div>
           <div><label style={S.lbl}>Template Body</label><textarea value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} rows={10} style={{ ...S.input, resize: "vertical" as const, fontFamily: "monospace", fontSize: 11, lineHeight: 1.6 }} /></div>
@@ -3143,16 +3274,16 @@ function DotPhraseManager() {
         </div>
       )}
       {phrases.map(p => (
-        <div key={p.trigger} style={{ borderBottom: "1px solid #0f172a", padding: "8px 0" }}>
+        <div key={p.trigger} style={{ borderBottom: "1px solid var(--border-subtle)", padding: "8px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setExpanded(expanded === p.trigger ? null : p.trigger)}>
               <span style={{ fontFamily: "monospace", color: "#0ea5e9", fontSize: 12 }}>.{p.trigger}</span>
-              <span style={{ color: "#94a3b8", fontSize: 12, marginLeft: 8 }}>{p.label}</span>
-              {p.builtin && <span style={{ color: "#334155", fontSize: 9, marginLeft: 6 }}>BUILT-IN</span>}
+              <span style={{ color: "var(--text-secondary)", fontSize: 12, marginLeft: 8 }}>{p.label}</span>
+              {p.builtin && <span style={{ color: "var(--text-faint)", fontSize: 9, marginLeft: 6 }}>BUILT-IN</span>}
             </div>
             <div style={{ display: "flex", gap: 4 }}>
-              <button onClick={() => { setEditing(p); setCreating(false); setForm({ trigger: p.trigger, label: p.label, body: p.body }); }} style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12, padding: 4 }}>✏️</button>
-              {!p.builtin && (<button onClick={() => deletePhrase(p.trigger)} style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12, padding: 4 }}>🗑</button>)}
+              <button onClick={() => { setEditing(p); setCreating(false); setForm({ trigger: p.trigger, label: p.label, body: p.body }); }} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: 4 }}>✏️</button>
+              {!p.builtin && (<button onClick={() => deletePhrase(p.trigger)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: 4 }}>🗑</button>)}
             </div>
           </div>
           {expanded === p.trigger && (<pre style={{ ...S.mono, marginTop: 6, fontSize: 10, maxHeight: 200, overflowY: "auto", whiteSpace: "pre-wrap" }}>{p.body}</pre>)}
@@ -3218,8 +3349,8 @@ function NewEncounterForm({patient,keys,relay,onDone,onCancel}:{
   };
 
   if(status==="done") return(
-    <div style={{...S.card,background:"#052e16",border:"1px solid #166534"}}>
-      <div style={{color:"#4ade80",fontWeight:600,marginBottom:8}}>✓ Encounter published and encrypted</div>
+    <div style={{...S.card,background:"var(--tint-green)",border:"1px solid var(--tint-green-border)"}}>
+      <div style={{color:"var(--accent-green)",fontWeight:600,marginBottom:8}}>✓ Encounter published and encrypted</div>
       <div style={{display:"flex",gap:8}}>
         <Btn solid col="#0ea5e9" onClick={()=>setStatus("idle")}>New Note</Btn>
         <Btn col="#475569" onClick={onDone}>View History</Btn>
@@ -3231,11 +3362,11 @@ function NewEncounterForm({patient,keys,relay,onDone,onCancel}:{
     <div style={S.card}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:14}}>📝 New Encounter — {patient.name}</div>
-        <Badge t="🔒 NIP-44" col="#a78bfa" bg="#1e1040"/>
+        <Badge t="🔒 NIP-44" col="#a78bfa" bg="var(--tint-purple)"/>
       </div>
 
       {status==="error"&&(
-        <div style={{...S.card,background:"#1c0a0a",border:"1px solid #f87171",marginBottom:12,padding:"10px 12px"}}>
+        <div style={{...S.card,background:"var(--tint-red)",border:"1px solid #f87171",marginBottom:12,padding:"10px 12px"}}>
           <div style={{color:"#f87171",fontSize:12}}>✗ {errorMsg}</div>
         </div>
       )}
@@ -3332,8 +3463,8 @@ function NurseNoteForm({patient,keys,relay,onDone}:{
   };
 
   if(status==="done") return(
-    <div style={{...S.card,background:"#052e16",border:"1px solid #166534"}}>
-      <div style={{color:"#4ade80",fontWeight:600,marginBottom:8}}>✓ Note saved</div>
+    <div style={{...S.card,background:"var(--tint-green)",border:"1px solid var(--tint-green-border)"}}>
+      <div style={{color:"var(--accent-green)",fontWeight:600,marginBottom:8}}>✓ Note saved</div>
       <div style={{display:"flex",gap:8}}>
         <Btn solid col="#0ea5e9" onClick={()=>setStatus("idle")}>New Note</Btn>
         <Btn col="#475569" onClick={onDone}>View History</Btn>
@@ -3417,7 +3548,7 @@ function MedicationList({patient,keys,relay}:{patient:Patient;keys:Keypair|null;
     <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <div style={{fontWeight:700,fontSize:14}}>💊 Medications</div>
-        {inactiveMeds.length>0&&<Badge t={`${inactiveMeds.length} inactive`} col="#64748b" bg="#0f172a"/>}
+        {inactiveMeds.length>0&&<Badge t={`${inactiveMeds.length} inactive`} col="#64748b" bg="var(--bg-app)"/>}
       </div>
       <div style={{display:"flex",gap:8}}>
         {inactiveMeds.length>0&&<Btn small col="#64748b" onClick={()=>setShowInactive(!showInactive)}>{showInactive?"Hide Inactive":"Show Inactive"}</Btn>}
@@ -3435,7 +3566,7 @@ function MedicationList({patient,keys,relay}:{patient:Patient;keys:Keypair|null;
       </div>
       <Btn solid col="#0ea5e9" onClick={save} disabled={!form.drug.trim()} style={{marginTop:10}}>Save</Btn>
     </div>}
-    {activeMeds.length===0&&!adding&&<div style={{...S.card,color:"#334155",textAlign:"center",padding:24}}>No active medications</div>}
+    {activeMeds.length===0&&!adding&&<div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:24}}>No active medications</div>}
     {activeMeds.map(m=>{
       const f=m.fhir;
       const isRx=!!(f.sig||f.qty||f.daysSupply||f.refills!==undefined||f.pharmacy);
@@ -3445,42 +3576,42 @@ function MedicationList({patient,keys,relay}:{patient:Patient;keys:Keypair|null;
             <div style={{flex:1}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
                 <div style={{fontWeight:600,fontSize:13}}>{f.medicationCodeableConcept?.text||f.drug}</div>
-                {isRx&&<Badge t="Rx" col="#f59e0b" bg="#1c1200"/>}
+                {isRx&&<Badge t="Rx" col="#f59e0b" bg="var(--tint-amber)"/>}
               </div>
               {/* Sig line (Rx) or dose/freq (manual add) */}
               {f.sig
-                ? <div style={{color:"#cbd5e1",fontSize:11,marginTop:2,fontStyle:"italic"}}>{f.sig}</div>
-                : <div style={{color:"#94a3b8",fontSize:11,marginTop:2}}>{f.dosageInstruction?.[0]?.text}</div>
+                ? <div style={{color:"var(--text-primary)",fontSize:11,marginTop:2,fontStyle:"italic"}}>{f.sig}</div>
+                : <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:2}}>{f.dosageInstruction?.[0]?.text}</div>
               }
               {/* Rx detail row */}
               {isRx&&(
                 <div style={{display:"flex",gap:12,marginTop:4,flexWrap:"wrap" as const}}>
-                  {f.qty&&<span style={{color:"#64748b",fontSize:10}}>Qty: {f.qty}</span>}
-                  {f.daysSupply>0&&<span style={{color:"#64748b",fontSize:10}}>Days: {f.daysSupply}</span>}
-                  {f.refills!==undefined&&<span style={{color:"#64748b",fontSize:10}}>Refills: {f.refills}</span>}
+                  {f.qty&&<span style={{color:"var(--text-muted)",fontSize:10}}>Qty: {f.qty}</span>}
+                  {f.daysSupply>0&&<span style={{color:"var(--text-muted)",fontSize:10}}>Days: {f.daysSupply}</span>}
+                  {f.refills!==undefined&&<span style={{color:"var(--text-muted)",fontSize:10}}>Refills: {f.refills}</span>}
                   {f.daw&&<span style={{color:"#f87171",fontSize:10,fontWeight:600}}>DAW</span>}
-                  {f.pharmacy&&<span style={{color:"#64748b",fontSize:10}}>📍 {f.pharmacy}</span>}
-                  {f.indication&&<span style={{color:"#64748b",fontSize:10}}>Dx: {f.indication}</span>}
+                  {f.pharmacy&&<span style={{color:"var(--text-muted)",fontSize:10}}>📍 {f.pharmacy}</span>}
+                  {f.indication&&<span style={{color:"var(--text-muted)",fontSize:10}}>Dx: {f.indication}</span>}
                 </div>
               )}
-              <div style={{color:"#475569",fontSize:10,marginTop:4}}>
+              <div style={{color:"var(--text-label)",fontSize:10,marginTop:4}}>
                 {isRx?"Prescribed:":"Started:"} {new Date(f.authoredOn).toLocaleDateString()}
               </div>
             </div>
             {canDo("prescribe")&&<button onClick={()=>deleteMed(m.event.id,f.medicationCodeableConcept?.text||f.drug)} style={{
-              background:"transparent",border:"none",color:"#64748b",cursor:"pointer",fontSize:16,padding:4
+              background:"transparent",border:"none",color:"var(--text-muted)",cursor:"pointer",fontSize:16,padding:4
             }}>🗑</button>}
           </div>
         </div>
       );
     })}
-    {showInactive&&inactiveMeds.map(m=><div key={m.event.id} style={{...S.card,borderLeft:"3px solid #475569",opacity:0.6}}>
+    {showInactive&&inactiveMeds.map(m=><div key={m.event.id} style={{...S.card,borderLeft:"3px solid var(--text-label)",opacity:0.6}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}>
         <div style={{flex:1}}>
           <div style={{fontWeight:600,fontSize:13}}>{m.fhir.medicationCodeableConcept?.text}</div>
-          <div style={{color:"#94a3b8",fontSize:11,marginTop:2}}>{m.fhir.dosageInstruction?.[0]?.text}</div>
-          <div style={{color:"#475569",fontSize:10,marginTop:4}}>Started: {new Date(m.fhir.authoredOn).toLocaleDateString()}</div>
-          <div style={{marginTop:4}}><Badge t="DISCONTINUED" col="#64748b" bg="#0f172a"/></div>
+          <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:2}}>{m.fhir.dosageInstruction?.[0]?.text}</div>
+          <div style={{color:"var(--text-label)",fontSize:10,marginTop:4}}>Started: {new Date(m.fhir.authoredOn).toLocaleDateString()}</div>
+          <div style={{marginTop:4}}><Badge t="DISCONTINUED" col="#64748b" bg="var(--bg-app)"/></div>
         </div>
       </div>
     </div>)}
@@ -3563,7 +3694,7 @@ function AllergyList({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
       </div>
       <Btn solid col="#0ea5e9" onClick={save} disabled={!form.allergen.trim()} style={{marginTop:10}}>Save</Btn>
     </div>}
-    {allergies.length===0&&!adding&&<div style={{...S.card,color:"#334155",textAlign:"center",padding:24}}>No known allergies</div>}
+    {allergies.length===0&&!adding&&<div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:24}}>No known allergies</div>}
     {allergies.map(a=><div key={a.event.id} style={{...S.card,borderLeft:"3px solid #f87171"}}>
       {deleting===a.event.id?(<>
         <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Delete: {a.fhir.code?.text}</div>
@@ -3578,11 +3709,11 @@ function AllergyList({patient,keys,relay}:{patient:Patient;keys:Keypair|null;rel
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}>
           <div style={{flex:1}}>
             <div style={{fontWeight:600,fontSize:13}}>{a.fhir.code?.text}</div>
-            <div style={{color:"#94a3b8",fontSize:11,marginTop:2}}>Reaction: {a.fhir.reaction?.[0]?.manifestation?.[0]?.text||"—"}</div>
+            <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:2}}>Reaction: {a.fhir.reaction?.[0]?.manifestation?.[0]?.text||"—"}</div>
             <div style={{color:"#f87171",fontSize:10,marginTop:4,textTransform:"capitalize"}}>Severity: {a.fhir.reaction?.[0]?.severity}</div>
           </div>
           {canDo("allergies")&&<button onClick={()=>setDeleting(a.event.id)} style={{
-            background:"transparent",border:"none",color:"#64748b",cursor:"pointer",
+            background:"transparent",border:"none",color:"var(--text-muted)",cursor:"pointer",
             fontSize:16,padding:4
           }}>🗑</button>}
         </div>
@@ -3659,40 +3790,40 @@ function DiagnosisSearch({onSelect,inputStyle}:{
       {focused&&(results.length>0||query.trim().length>1)&&(
         <div style={{
           position:"absolute",top:"100%",left:0,right:0,zIndex:50,
-          background:"#1e293b",border:"1px solid #334155",borderRadius:"0 0 8px 8px",
-          maxHeight:300,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,0.4)"
+          background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:"0 0 8px 8px",
+          maxHeight:300,overflowY:"auto",boxShadow:"0 4px 12px var(--shadow)"
         }}>
           {results.map((t,i)=>(
             <div key={`${t.display}-${i}`} onClick={()=>{
               onSelect(t);setQuery("");setResults([]);setFocused(false);
             }} style={{
-              padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid #0f172a",
+              padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",
               fontSize:12,display:"flex",justifyContent:"space-between",alignItems:"center",
             }}
-            onMouseEnter={e=>(e.currentTarget.style.background="#334155")}
+            onMouseEnter={e=>(e.currentTarget.style.background="var(--bg-hover)")}
             onMouseLeave={e=>(e.currentTarget.style.background="transparent")}
             >
               <div>
-                <span style={{color:"#e2e8f0"}}>{t.display}</span>
+                <span style={{color:"var(--text-primary)"}}>{t.display}</span>
                 {t.custom&&<span style={{color:"#f59e0b",fontSize:9,marginLeft:6}}>CUSTOM</span>}
               </div>
               <div style={{display:"flex",gap:8,flexShrink:0}}>
-                {t.icd10&&<span style={{color:"#64748b",fontSize:10,fontFamily:"monospace"}}>{t.icd10}</span>}
-                {t.snomed&&<span style={{color:"#475569",fontSize:9,fontFamily:"monospace"}}>SNOMED:{t.snomed}</span>}
+                {t.icd10&&<span style={{color:"var(--text-muted)",fontSize:10,fontFamily:"monospace"}}>{t.icd10}</span>}
+                {t.snomed&&<span style={{color:"var(--text-label)",fontSize:9,fontFamily:"monospace"}}>SNOMED:{t.snomed}</span>}
               </div>
             </div>
           ))}
           <div onClick={()=>setShowCustom(!showCustom)} style={{
-            padding:"8px 12px",cursor:"pointer",borderTop:"1px solid #334155",
+            padding:"8px 12px",cursor:"pointer",borderTop:"1px solid var(--border)",
             color:"#0ea5e9",fontSize:12,display:"flex",alignItems:"center",gap:6,
           }}
-          onMouseEnter={e=>(e.currentTarget.style.background="#0c1a2e")}
+          onMouseEnter={e=>(e.currentTarget.style.background="var(--bg-inset)")}
           onMouseLeave={e=>(e.currentTarget.style.background="transparent")}
           >
             <span>+</span> {showCustom?"Cancel custom entry":"Add custom diagnosis…"}
           </div>
           {showCustom&&(
-            <div style={{padding:"8px 12px",background:"#0f172a",borderTop:"1px solid #334155"}}>
+            <div style={{padding:"8px 12px",background:"var(--bg-app)",borderTop:"1px solid var(--border)"}}>
               <div style={{marginBottom:6}}>
                 <label style={S.lbl}>Diagnosis Name *</label>
                 <input value={custom.display} onChange={e=>setCustom(c=>({...c,display:e.target.value}))}
@@ -3819,35 +3950,35 @@ function ProblemList({patient,keys,relay,compact=false}:{
           <div style={{fontWeight:700,fontSize:13,color:"#a78bfa"}}>🩺 Problems</div>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             {active.length>0&&<Badge t={`${active.length} active`} col="#a78bfa" bg="#1a0a2e"/>}
-            {resolved.length>0&&<span style={{color:"#475569",fontSize:10,cursor:"pointer"}}
+            {resolved.length>0&&<span style={{color:"var(--text-label)",fontSize:10,cursor:"pointer"}}
               onClick={()=>setShowResolved(!showResolved)}>{resolved.length} resolved</span>}
           </div>
         </div>
         {active.length===0&&resolved.length===0&&(
-          <div style={{color:"#334155",fontSize:12,padding:"4px 0"}}>No problems documented</div>
+          <div style={{color:"var(--text-faint)",fontSize:12,padding:"4px 0"}}>No problems documented</div>
         )}
         {active.map(c=>{
           const f=c.fhir;
           const icd=f.code?.coding?.find((c:any)=>c.system?.includes("icd-10"))?.code;
           return(
-            <div key={c.event.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0",borderBottom:"1px solid #0f172a"}}>
-              <div style={{fontSize:12,color:"#e2e8f0"}}>
+            <div key={c.event.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0",borderBottom:"1px solid var(--border-subtle)"}}>
+              <div style={{fontSize:12,color:"var(--text-primary)"}}>
                 {f.code?.text}
-                {icd&&<span style={{color:"#475569",fontSize:10,marginLeft:6,fontFamily:"monospace"}}>{icd}</span>}
+                {icd&&<span style={{color:"var(--text-label)",fontSize:10,marginLeft:6,fontFamily:"monospace"}}>{icd}</span>}
               </div>
               {f.severity?.coding?.[0]?.display&&(
                 <Badge t={f.severity.coding[0].display} col={
                   f.severity.coding[0].display==="severe"?"#f87171":
-                  f.severity.coding[0].display==="moderate"?"#f59e0b":"#64748b"
-                } bg="#0f172a"/>
+                  f.severity.coding[0].display==="moderate"?"#f59e0b":"var(--text-muted)"
+                } bg="var(--bg-app)"/>
               )}
             </div>
           );
         })}
         {showResolved&&resolved.map(c=>(
-          <div key={c.event.id} style={{display:"flex",alignItems:"center",padding:"3px 0",borderBottom:"1px solid #0f172a",opacity:0.5}}>
-            <div style={{fontSize:12,color:"#64748b"}}>{c.fhir.code?.text}</div>
-            <Badge t={c.currentStatus.toUpperCase()} col="#475569" bg="#0f172a"/>
+          <div key={c.event.id} style={{display:"flex",alignItems:"center",padding:"3px 0",borderBottom:"1px solid var(--border-subtle)",opacity:0.5}}>
+            <div style={{fontSize:12,color:"var(--text-muted)"}}>{c.fhir.code?.text}</div>
+            <Badge t={c.currentStatus.toUpperCase()} col="#475569" bg="var(--bg-app)"/>
           </div>
         ))}
       </div>
@@ -3859,7 +3990,7 @@ function ProblemList({patient,keys,relay,compact=false}:{
     <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <div style={{fontWeight:700,fontSize:14}}>🩺 Problem List</div>
-        {resolved.length>0&&<Badge t={`${resolved.length} resolved`} col="#64748b" bg="#0f172a"/>}
+        {resolved.length>0&&<Badge t={`${resolved.length} resolved`} col="#64748b" bg="var(--bg-app)"/>}
       </div>
       <div style={{display:"flex",gap:8}}>
         {resolved.length>0&&<Btn small col="#64748b" onClick={()=>setShowResolved(!showResolved)}>
@@ -3874,13 +4005,13 @@ function ProblemList({patient,keys,relay,compact=false}:{
         <div style={{marginBottom:8}}>
           <label style={S.lbl}>Diagnosis</label>
           {selectedDx?(
-            <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"#0f172a",borderRadius:7,border:"1px solid #334155"}}>
-              <span style={{color:"#e2e8f0",fontSize:12,flex:1}}>{selectedDx.display}</span>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"var(--bg-app)",borderRadius:7,border:"1px solid var(--border)"}}>
+              <span style={{color:"var(--text-primary)",fontSize:12,flex:1}}>{selectedDx.display}</span>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
-                {selectedDx.icd10&&<span style={{color:"#64748b",fontSize:10,fontFamily:"monospace"}}>{selectedDx.icd10}</span>}
-                {selectedDx.snomed&&<span style={{color:"#475569",fontSize:9,fontFamily:"monospace"}}>SNOMED:{selectedDx.snomed}</span>}
+                {selectedDx.icd10&&<span style={{color:"var(--text-muted)",fontSize:10,fontFamily:"monospace"}}>{selectedDx.icd10}</span>}
+                {selectedDx.snomed&&<span style={{color:"var(--text-label)",fontSize:9,fontFamily:"monospace"}}>SNOMED:{selectedDx.snomed}</span>}
               </div>
-              <button onClick={()=>setSelectedDx(null)} style={{background:"transparent",border:"none",color:"#64748b",cursor:"pointer",fontSize:14}}>×</button>
+              <button onClick={()=>setSelectedDx(null)} style={{background:"transparent",border:"none",color:"var(--text-muted)",cursor:"pointer",fontSize:14}}>×</button>
             </div>
           ):(
             <DiagnosisSearch onSelect={setSelectedDx}/>
@@ -3915,7 +4046,7 @@ function ProblemList({patient,keys,relay,compact=false}:{
     )}
 
     {active.length===0&&!adding&&(
-      <div style={{...S.card,color:"#334155",textAlign:"center",padding:24}}>No active problems</div>
+      <div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:24}}>No active problems</div>
     )}
 
     {active.map(c=>{
@@ -3931,24 +4062,24 @@ function ProblemList({patient,keys,relay,compact=false}:{
                 <div style={{fontWeight:600,fontSize:13}}>{f.code?.text}</div>
                 {severityDisplay&&<Badge t={severityDisplay} col={
                   severityDisplay==="severe"?"#f87171":
-                  severityDisplay==="moderate"?"#f59e0b":"#64748b"
-                } bg="#0f172a"/>}
+                  severityDisplay==="moderate"?"#f59e0b":"var(--text-muted)"
+                } bg="var(--bg-app)"/>}
               </div>
               <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap" as const}}>
-                {icd&&<span style={{color:"#64748b",fontSize:10,fontFamily:"monospace"}}>ICD-10: {icd}</span>}
-                {snomed&&<span style={{color:"#475569",fontSize:10,fontFamily:"monospace"}}>SNOMED: {snomed}</span>}
+                {icd&&<span style={{color:"var(--text-muted)",fontSize:10,fontFamily:"monospace"}}>ICD-10: {icd}</span>}
+                {snomed&&<span style={{color:"var(--text-label)",fontSize:10,fontFamily:"monospace"}}>SNOMED: {snomed}</span>}
               </div>
               {f.note?.[0]?.text&&(
-                <div style={{color:"#94a3b8",fontSize:11,marginTop:4,fontStyle:"italic"}}>{f.note[0].text}</div>
+                <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:4,fontStyle:"italic"}}>{f.note[0].text}</div>
               )}
-              <div style={{color:"#475569",fontSize:10,marginTop:4}}>
+              <div style={{color:"var(--text-label)",fontSize:10,marginTop:4}}>
                 {f.onsetDateTime&&<>Onset: {new Date(f.onsetDateTime).toLocaleDateString()} · </>}
                 Recorded: {new Date(f.recordedDate).toLocaleDateString()}
               </div>
             </div>
             <div style={{display:"flex",gap:4,flexShrink:0}}>
               {canDo("write")&&<button onClick={()=>changeStatus(c.event.id,f,"resolved")} title="Mark resolved"
-                style={{background:"transparent",border:"1px solid #334155",color:"#4ade80",
+                style={{background:"transparent",border:"1px solid var(--border)",color:"var(--accent-green)",
                   cursor:"pointer",fontSize:10,padding:"3px 8px",borderRadius:6,fontFamily:"inherit"}}>
                 ✓ Resolve
               </button>}
@@ -3960,26 +4091,26 @@ function ProblemList({patient,keys,relay,compact=false}:{
 
     {showResolved&&resolved.length>0&&(
       <>
-        <div style={{color:"#475569",fontSize:11,fontWeight:600,margin:"12px 0 6px",textTransform:"uppercase",letterSpacing:"0.5px"}}>
+        <div style={{color:"var(--text-label)",fontSize:11,fontWeight:600,margin:"12px 0 6px",textTransform:"uppercase",letterSpacing:"0.5px"}}>
           Resolved / Inactive
         </div>
         {resolved.map(c=>{
           const f=c.fhir;
           return(
-            <div key={c.event.id} style={{...S.card,borderLeft:"3px solid #475569",opacity:0.6}}>
+            <div key={c.event.id} style={{...S.card,borderLeft:"3px solid var(--text-label)",opacity:0.6}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"start"}}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:600,fontSize:13}}>{f.code?.text}</div>
-                  <div style={{color:"#475569",fontSize:10,marginTop:4}}>
+                  <div style={{color:"var(--text-label)",fontSize:10,marginTop:4}}>
                     {f.onsetDateTime&&<>Onset: {new Date(f.onsetDateTime).toLocaleDateString()} · </>}
                     Recorded: {new Date(f.recordedDate).toLocaleDateString()}
                   </div>
                   <div style={{marginTop:4}}>
-                    <Badge t={c.currentStatus.toUpperCase()} col="#475569" bg="#0f172a"/>
+                    <Badge t={c.currentStatus.toUpperCase()} col="#475569" bg="var(--bg-app)"/>
                   </div>
                 </div>
                 {canDo("write")&&<button onClick={()=>changeStatus(c.event.id,f,"active")} title="Reactivate"
-                  style={{background:"transparent",border:"1px solid #334155",color:"#f59e0b",
+                  style={{background:"transparent",border:"1px solid var(--border)",color:"#f59e0b",
                     cursor:"pointer",fontSize:10,padding:"3px 8px",borderRadius:6,fontFamily:"inherit"}}>
                   ↩ Reactivate
                 </button>}
@@ -4059,17 +4190,17 @@ function ImmunizationList({patient,keys,relay}:{patient:Patient;keys:Keypair|nul
       </div>
       <Btn solid col="#0ea5e9" onClick={save} disabled={!form.vaccine.trim()||!form.date} style={{marginTop:10}}>Save</Btn>
     </div>}
-    {immunizations.length===0&&!adding&&<div style={{...S.card,color:"#334155",textAlign:"center",padding:24}}>No immunizations recorded</div>}
-    {Object.entries(grouped).map(([vaccine,doses]:[string,any])=><div key={vaccine} style={{...S.card,borderLeft:"3px solid #4ade80"}}>
+    {immunizations.length===0&&!adding&&<div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:24}}>No immunizations recorded</div>}
+    {Object.entries(grouped).map(([vaccine,doses]:[string,any])=><div key={vaccine} style={{...S.card,borderLeft:"3px solid var(--accent-green)"}}>
       <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>{vaccine}</div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
         {doses.map((d:any)=><div key={d.event.id} style={{
-          background:"#052e16",border:"1px solid #166534",borderRadius:6,padding:"4px 8px"
+          background:"var(--bg-card)",border:"1px solid var(--accent-green)",borderRadius:6,padding:"4px 8px"
         }}>
-          <div style={{color:"#4ade80",fontSize:10,fontWeight:600}}>
+          <div style={{color:"var(--accent-green-text)",fontSize:10,fontWeight:600}}>
             {d.fhir.doseQuantity?`#${d.fhir.doseQuantity.value}`:"Dose"}
           </div>
-          <div style={{color:"#94a3b8",fontSize:9,marginTop:2}}>
+          <div style={{color:"var(--text-secondary)",fontSize:9,marginTop:2}}>
             {new Date(d.fhir.occurrenceDateTime).toLocaleDateString()}
           </div>
         </div>)}
@@ -4279,7 +4410,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
   };
 
   if(loading)return(
-    <div style={{...S.card,textAlign:"center",padding:40,color:"#64748b"}}>
+    <div style={{...S.card,textAlign:"center",padding:40,color:"var(--text-muted)"}}>
       <div style={{fontSize:24,marginBottom:12}}>⏳</div>
       <div style={{fontSize:14}}>Loading messages...</div>
     </div>
@@ -4288,9 +4419,9 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
   return(
     <div style={{display:"flex",gap:0,height:"calc(100vh - 160px)",minHeight:400}}>
       {/* ── Thread list (left) ── */}
-      <div style={{width:320,flexShrink:0,borderRight:"1px solid #1e293b",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"10px 14px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{fontSize:13,fontWeight:700}}>💬 Messages <span style={{color:"#475569",fontWeight:400,fontSize:11}}>({threads.length})</span></div>
+      <div style={{width:320,flexShrink:0,borderRight:"1px solid var(--border-subtle)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"10px 14px",borderBottom:"1px solid var(--border-subtle)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:13,fontWeight:700}}>💬 Messages <span style={{color:"var(--text-label)",fontWeight:400,fontSize:11}}>({threads.length})</span></div>
           <button onClick={()=>{setComposing(true);setSelectedThreadId(null);}} style={{
             background:"#0ea5e9",border:"none",color:"#fff",borderRadius:6,
             padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"
@@ -4298,14 +4429,14 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
         </div>
 
         {!patient.npub&&(
-          <div style={{margin:12,padding:"10px 12px",background:"#1c0a0a",border:"1px solid #f87171",borderRadius:8,fontSize:11,color:"#f87171"}}>
+          <div style={{margin:12,padding:"10px 12px",background:"var(--tint-red)",border:"1px solid #f87171",borderRadius:8,fontSize:11,color:"#f87171"}}>
             ⚠️ No portal access — generate an access code in Overview to enable messaging.
           </div>
         )}
 
         <div style={{flex:1,overflowY:"auto"}}>
           {threads.length===0&&(
-            <div style={{padding:32,textAlign:"center",color:"#334155",fontSize:12}}>No messages yet.</div>
+            <div style={{padding:32,textAlign:"center",color:"var(--text-faint)",fontSize:12}}>No messages yet.</div>
           )}
           {threads.map(({rootId,msgs,latest})=>{
             const isSel=rootId===selectedThreadId;
@@ -4316,28 +4447,28 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
             return(
               <div key={rootId} onClick={()=>{setSelectedThreadId(rootId);setComposing(false);markThreadRead(rootId);}}
                 style={{
-                  padding:"6px 14px",borderBottom:"1px solid #0f172a",cursor:"pointer",
-                  background:isSel?"#1e3a5f":"transparent",
+                  padding:"6px 14px",borderBottom:"1px solid var(--border-subtle)",cursor:"pointer",
+                  background:isSel?"var(--bg-hover)":"transparent",
                   borderLeft:isSel?"3px solid #0ea5e9":isRead?"3px solid transparent":"3px solid #0ea5e944",
-                  opacity:isRead&&!isSel?0.55:1,
+                  opacity:isRead&&!isSel?0.7:1,
                 }}
-                onMouseEnter={e=>{ if(!isSel)(e.currentTarget as HTMLElement).style.background="#0d1929"; }}
+                onMouseEnter={e=>{ if(!isSel)(e.currentTarget as HTMLElement).style.background="var(--bg-hover)"; }}
                 onMouseLeave={e=>{ if(!isSel)(e.currentTarget as HTMLElement).style.background="transparent"; }}
               >
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:1}}>
-                  <div style={{fontSize:12,fontWeight:isRead&&!isSel?400:600,color:latest.fromPractice?"#7dd3fc":isRead&&!isSel?"#64748b":"#e2e8f0",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",maxWidth:200}}>
+                  <div style={{fontSize:12,fontWeight:isRead&&!isSel?400:600,color:latest.fromPractice?"var(--text-sender)":isRead&&!isSel?"var(--text-muted)":"var(--text-primary)",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",maxWidth:200}}>
                     {rootMsg.fromPractice?"You (Practice)":"Patient"}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                    {threadNoReply&&<span style={{fontSize:9,color:"#f59e0b",background:"#1c1200",border:"1px solid #78350f",borderRadius:4,padding:"1px 5px"}}>🔒 No reply</span>}
-                    {replyCount>0&&<span style={{fontSize:9,background:"#1e293b",border:"1px solid #334155",borderRadius:99,padding:"1px 6px",color:"#64748b"}}>{replyCount} repl{replyCount===1?"y":"ies"}</span>}
-                    <div style={{fontSize:10,color:"#475569"}}>{relT(latest.event.created_at)}</div>
+                    {threadNoReply&&<span style={{fontSize:9,color:"#f59e0b",background:"var(--bg-card)",border:"1px solid #f59e0b44",borderRadius:4,padding:"1px 5px"}}>🔒 No reply</span>}
+                    {replyCount>0&&<span style={{fontSize:9,background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:99,padding:"1px 6px",color:"var(--text-muted)"}}>{replyCount} repl{replyCount===1?"y":"ies"}</span>}
+                    <div style={{fontSize:10,color:"var(--text-label)"}}>{relT(latest.event.created_at)}</div>
                   </div>
                 </div>
-                <div style={{fontSize:12,fontWeight:600,color:"#cbd5e1",marginBottom:3,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                <div style={{fontSize:12,fontWeight:600,color:"var(--text-primary)",marginBottom:3,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
                   {rootMsg.subject}
                 </div>
-                <div style={{fontSize:11,color:"#475569",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                <div style={{fontSize:11,color:"var(--text-label)",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
                   {latest.text.slice(0,65)}{latest.text.length>65?"…":""}
                 </div>
               </div>
@@ -4349,7 +4480,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
       {/* ── Right pane ── */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {!selectedThread&&!composing&&(
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#334155",flexDirection:"column",gap:12}}>
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text-faint)",flexDirection:"column",gap:12}}>
             <div style={{fontSize:32}}>💬</div>
             <div style={{fontSize:13}}>Select a conversation or compose a new message</div>
           </div>
@@ -4359,14 +4490,14 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
         {selectedThread&&!composing&&(
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             {/* Thread header */}
-            <div style={{padding:"16px 20px",borderBottom:"1px solid #1e293b",flexShrink:0}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border-subtle)",flexShrink:0}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
                 <div style={{fontSize:16,fontWeight:700}}>{selectedThread.msgs[0].subject}</div>
                 {selectedThread.msgs.some((m:any)=>m.noReply)&&(
-                  <span style={{fontSize:10,color:"#f59e0b",background:"#1c1200",border:"1px solid #78350f",borderRadius:5,padding:"2px 7px",fontWeight:600}}>🔒 No Reply</span>
+                  <span style={{fontSize:10,color:"#f59e0b",background:"var(--bg-card)",border:"1px solid #f59e0b44",borderRadius:5,padding:"2px 7px",fontWeight:600}}>🔒 No Reply</span>
                 )}
               </div>
-              <div style={{fontSize:11,color:"#475569"}}>{selectedThread.msgs.length} message{selectedThread.msgs.length!==1?"s":""} · with {patient.name}</div>
+              <div style={{fontSize:11,color:"var(--text-label)"}}>{selectedThread.msgs.length} message{selectedThread.msgs.length!==1?"s":""} · with {patient.name}</div>
             </div>
 
             {/* Messages */}
@@ -4382,19 +4513,19 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
                       {/* Sender + timestamp */}
                       <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:4,
                         flexDirection:fromMe?"row-reverse":"row"}}>
-                        <span style={{fontSize:11,fontWeight:600,color:fromMe?"#7dd3fc":msg.isGuardianMsg?"#fbbf24":"#e2e8f0"}}>
+                        <span style={{fontSize:11,fontWeight:600,color:fromMe?"var(--text-sender)":msg.isGuardianMsg?"#fbbf24":"var(--text-primary)"}}>
                           {senderLabel}
                         </span>
-                        <span style={{fontSize:10,color:"#475569"}}>{fmtDate(msg.event.created_at)}</span>
+                        <span style={{fontSize:10,color:"var(--text-label)"}}>{fmtDate(msg.event.created_at)}</span>
                       </div>
                       {/* Bubble */}
                       <div style={{
                         maxWidth:"80%",
                         padding:"10px 14px",
                         borderRadius:fromMe?"16px 16px 4px 16px":"16px 16px 16px 4px",
-                        background:fromMe?"#0c2240":"#1e293b",
-                        border:`1px solid ${fromMe?"#1e4a7f":"#334155"}`,
-                        fontSize:13,lineHeight:1.7,color:"#e2e8f0",
+                        background:fromMe?"var(--bg-sent)":"var(--bg-card)",
+                        border:`1px solid ${fromMe?"var(--border-sent)":"var(--border)"}`,
+                        fontSize:13,lineHeight:1.7,color:"var(--text-primary)",
                         whiteSpace:"pre-wrap",wordBreak:"break-word" as const,
                       }}>
                         {msg.text}
@@ -4408,13 +4539,13 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
             {patient.npub&&(
               selectedThread.msgs.some((m:any)=>m.noReply)
               ?(
-                <div style={{padding:"12px 20px",borderTop:"1px solid #1e293b",flexShrink:0,
-                  display:"flex",alignItems:"center",gap:10,background:"#0c0e12"}}>
+                <div style={{padding:"12px 20px",borderTop:"1px solid var(--border-subtle)",flexShrink:0,
+                  display:"flex",alignItems:"center",gap:10,background:"var(--bg-deep)"}}>
                   <span style={{fontSize:13}}>🔒</span>
-                  <span style={{fontSize:12,color:"#64748b"}}>Reply disabled for this thread — patient cannot respond.</span>
+                  <span style={{fontSize:12,color:"var(--text-muted)"}}>Reply disabled for this thread — patient cannot respond.</span>
                 </div>
               ):(
-                <div style={{padding:"12px 20px",borderTop:"1px solid #1e293b",flexShrink:0}}>
+                <div style={{padding:"12px 20px",borderTop:"1px solid var(--border-subtle)",flexShrink:0}}>
                   <textarea value={replyBody} onChange={e=>setReplyBody(e.target.value)}
                     placeholder="Write a reply..."
                     rows={3}
@@ -4426,11 +4557,11 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
                     <Btn solid col="#0ea5e9" onClick={sendReply} disabled={!replyBody.trim()||sending}>
                       {sending?"Sending…":"↩ Send Reply"}
                     </Btn>
-                    <span style={{fontSize:10,color:"#334155"}}>⌘+Enter</span>
+                    <span style={{fontSize:10,color:"var(--text-faint)"}}>⌘+Enter</span>
                     <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",marginLeft:"auto"}}>
                       <input type="checkbox" checked={replyNoReply} onChange={e=>setReplyNoReply(e.target.checked)}
                         style={{accentColor:"#f59e0b",width:14,height:14,cursor:"pointer"}}/>
-                      <span style={{fontSize:11,color:replyNoReply?"#f59e0b":"#475569",fontWeight:replyNoReply?600:400,userSelect:"none" as const}}>
+                      <span style={{fontSize:11,color:replyNoReply?"#f59e0b":"var(--text-label)",fontWeight:replyNoReply?600:400,userSelect:"none" as const}}>
                         Do not reply
                       </span>
                     </label>
@@ -4446,11 +4577,11 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
           <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <div style={{fontSize:15,fontWeight:700}}>New Message</div>
-              <button onClick={()=>setComposing(false)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+              <button onClick={()=>setComposing(false)} style={{background:"none",border:"none",color:"var(--text-label)",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
             </div>
             <div style={{marginBottom:12}}>
               <label style={S.lbl}>To</label>
-              <div style={{...S.input,color:"#64748b",padding:"8px 10px"}}>{patient.name}</div>
+              <div style={{...S.input,color:"var(--text-muted)",padding:"8px 10px"}}>{patient.name}</div>
             </div>
             <div style={{marginBottom:12}}>
               <label style={S.lbl}>Subject</label>
@@ -4473,7 +4604,7 @@ function MessagesView({patient,keys,relay,initialThreadId}:{
               <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",marginLeft:"auto"}}>
                 <input type="checkbox" checked={newNoReply} onChange={e=>setNewNoReply(e.target.checked)}
                   style={{accentColor:"#f59e0b",width:14,height:14,cursor:"pointer"}}/>
-                <span style={{fontSize:11,color:newNoReply?"#f59e0b":"#475569",fontWeight:newNoReply?600:400,userSelect:"none" as const}}>
+                <span style={{fontSize:11,color:newNoReply?"#f59e0b":"var(--text-label)",fontWeight:newNoReply?600:400,userSelect:"none" as const}}>
                   Do not reply
                 </span>
               </label>
@@ -4740,9 +4871,9 @@ function ResultsView({patient,keys,relay,category}:{
   };
 
   const interpBadge=(i:string)=>{
-    if(i==="critical")return <Badge t="⚠ Critical" col="#f87171" bg="#1c0a0a"/>;
-    if(i==="abnormal")return <Badge t="Abnormal"   col="#fbbf24" bg="#1c1200"/>;
-    return <Badge t="Normal" col="#4ade80" bg="#052e16"/>;
+    if(i==="critical")return <Badge t="⚠ Critical" col="#f87171" bg="var(--tint-red)"/>;
+    if(i==="abnormal")return <Badge t="Abnormal"   col="#fbbf24" bg="var(--tint-amber)"/>;
+    return <Badge t="Normal" col="var(--accent-green)" bg="var(--tint-green)"/>;
   };
 
   const pending=orders.filter(o=>o.status==="active");
@@ -4751,7 +4882,7 @@ function ResultsView({patient,keys,relay,category}:{
 
   const renderOrder=(order:any)=>{
     const isSelected=selectedId===order.event.id;
-    const borderCol=order.status==="resulted"?"#4ade80":order.status==="cancelled"?"#334155":"#f59e0b";
+    const borderCol=order.status==="resulted"?"var(--accent-green)":order.status==="cancelled"?"var(--text-faint)":"#f59e0b";
     return(
       <div key={order.event.id}
         onClick={(e)=>{
@@ -4760,7 +4891,7 @@ function ResultsView({patient,keys,relay,category}:{
           setEntering(false);setResultForm(emptyResultForm);
         }}
         style={{...S.card,cursor:"pointer",borderLeft:`3px solid ${borderCol}`,
-          background:isSelected?"#162032":"#1e293b"}}>
+          background:isSelected?"var(--bg-hover)":"var(--bg-card)"}}>
 
         {/* Collapsed row */}
         {!isSelected&&(
@@ -4770,15 +4901,15 @@ function ResultsView({patient,keys,relay,category}:{
                 {order.fhir.code?.text}
                 {order.fhir.priority==="stat"&&<span style={{color:"#f87171",fontSize:10,marginLeft:6,fontWeight:700}}>STAT</span>}
               </div>
-              <div style={{color:"#475569",fontSize:10,marginTop:2}}>
+              <div style={{color:"var(--text-label)",fontSize:10,marginTop:2}}>
                 {new Date(order.event.created_at*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                 {order.fhir.reasonCode?.[0]?.text&&` · ${order.fhir.reasonCode[0].text}`}
               </div>
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               {order.status==="resulted"&&order.result&&interpBadge(order.result.fhir.interpretation)}
-              {order.status==="active"&&<Badge t="Pending" col="#f59e0b" bg="#1c1200"/>}
-              {order.status==="cancelled"&&<Badge t="Cancelled" col="#64748b" bg="#0f172a"/>}
+              {order.status==="active"&&<Badge t="Pending" col="#f59e0b" bg="var(--tint-amber)"/>}
+              {order.status==="cancelled"&&<Badge t="Cancelled" col="#64748b" bg="var(--bg-app)"/>}
             </div>
           </div>
         )}
@@ -4792,14 +4923,14 @@ function ResultsView({patient,keys,relay,category}:{
                   {category==="imaging"?"🩻":"🧪"} {order.fhir.code?.text}
                   {order.fhir.priority==="stat"&&<span style={{color:"#f87171",fontSize:11,marginLeft:8,fontWeight:700}}>STAT</span>}
                 </div>
-                <div style={{color:"#64748b",fontSize:10,marginTop:3}}>
+                <div style={{color:"var(--text-muted)",fontSize:10,marginTop:3}}>
                   {new Date(order.event.created_at*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                 </div>
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                {order.status==="resulted"&&<Badge t="✓ Resulted" col="#4ade80" bg="#052e16"/>}
-                {order.status==="active"&&<Badge t="Pending" col="#f59e0b" bg="#1c1200"/>}
-                {order.status==="cancelled"&&<Badge t="Cancelled" col="#64748b" bg="#0f172a"/>}
+                {order.status==="resulted"&&<Badge t="✓ Resulted" col="var(--accent-green)" bg="var(--tint-green)"/>}
+                {order.status==="active"&&<Badge t="Pending" col="#f59e0b" bg="var(--tint-amber)"/>}
+                {order.status==="cancelled"&&<Badge t="Cancelled" col="#64748b" bg="var(--bg-app)"/>}
               </div>
             </div>
 
@@ -4818,12 +4949,12 @@ function ResultsView({patient,keys,relay,category}:{
 
             {/* Result display */}
             {order.result&&(
-              <div style={{...S.card,background:"#0a1628",border:"1px solid #166534",padding:"10px 12px",marginBottom:10}}>
+              <div style={{...S.card,background:"var(--bg-deep)",border:"1px solid var(--border)",padding:"10px 12px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{fontWeight:600,fontSize:12}}>Result</div>
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
                     {interpBadge(order.result.fhir.interpretation)}
-                    <span style={{color:"#475569",fontSize:10}}>
+                    <span style={{color:"var(--text-label)",fontSize:10}}>
                       Ordered {new Date(order.event.created_at*1000).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
                       {" · "}
                       Resulted {order.result.fhir.effectiveDate
@@ -4837,26 +4968,26 @@ function ResultsView({patient,keys,relay,category}:{
                   <div style={{overflowX:"auto",marginBottom:order.result.fhir.result?8:0}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                       <thead>
-                        <tr style={{borderBottom:"1px solid #1e3a5f"}}>
+                        <tr style={{borderBottom:"1px solid var(--border-accent)"}}>
                           {["Analyte","Value","Unit","Ref Range","Flag"].map(h=>(
-                            <th key={h} style={{textAlign:"left",padding:"3px 6px",color:"#475569",fontWeight:600,fontSize:10}}>{h}</th>
+                            <th key={h} style={{textAlign:"left",padding:"3px 6px",color:"var(--text-label)",fontWeight:600,fontSize:10}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {order.result.fhir.analytes.map((a:any,i:number)=>(
-                          <tr key={i} style={{borderBottom:"1px solid #0f172a"}}>
-                            <td style={{padding:"4px 6px",color:"#e2e8f0"}}>{a.name}</td>
+                          <tr key={i} style={{borderBottom:"1px solid var(--border-subtle)"}}>
+                            <td style={{padding:"4px 6px",color:"var(--text-primary)"}}>{a.name}</td>
                             <td style={{padding:"4px 6px",fontWeight:600,
-                              color:a.flag==="critical"?"#f87171":a.flag==="high"||a.flag==="low"?"#fbbf24":"#e2e8f0"}}>
+                              color:a.flag==="critical"?"#f87171":a.flag==="high"||a.flag==="low"?"#fbbf24":"var(--text-primary)"}}>
                               {a.value}
                             </td>
-                            <td style={{padding:"4px 6px",color:"#64748b"}}>{a.unit}</td>
-                            <td style={{padding:"4px 6px",color:"#64748b"}}>{a.refRange}</td>
+                            <td style={{padding:"4px 6px",color:"var(--text-muted)"}}>{a.unit}</td>
+                            <td style={{padding:"4px 6px",color:"var(--text-muted)"}}>{a.refRange}</td>
                             <td style={{padding:"4px 6px"}}>
-                              {a.flag==="critical"&&<Badge t="CRIT" col="#f87171" bg="#1c0a0a"/>}
-                              {a.flag==="high"&&<Badge t="H" col="#fbbf24" bg="#1c1200"/>}
-                              {a.flag==="low"&&<Badge t="L" col="#93c5fd" bg="#0c1a2e"/>}
+                              {a.flag==="critical"&&<Badge t="CRIT" col="#f87171" bg="var(--tint-red)"/>}
+                              {a.flag==="high"&&<Badge t="H" col="#fbbf24" bg="var(--tint-amber)"/>}
+                              {a.flag==="low"&&<Badge t="L" col="#93c5fd" bg="var(--bg-inset)"/>}
                             </td>
                           </tr>
                         ))}
@@ -4881,7 +5012,7 @@ function ResultsView({patient,keys,relay,category}:{
             {/* Enter result (pending only) */}
             {order.status==="active"&&!entering&&canDo("sign")&&(
               <div style={{marginTop:8}}>
-                <Btn solid col="#4ade80" small onClick={()=>{
+                <Btn solid col="var(--accent-green)" small onClick={()=>{
                   setEntering(true);setResultForm(emptyResultForm);
                   // Auto-populate analytes from template if available
                   const testName=order.fhir.code?.text||"";
@@ -4895,7 +5026,7 @@ function ResultsView({patient,keys,relay,category}:{
 
             {/* Result entry form */}
             {entering&&order.event.id===selectedId&&(
-              <div style={{...S.card,marginTop:10,border:"1px solid #1e3a5f",background:"#0a1628"}}>
+              <div style={{...S.card,marginTop:10,border:"1px solid var(--border-accent)",background:"var(--bg-deep)"}}>
                 <div style={{fontWeight:600,fontSize:12,marginBottom:10}}>
                   📋 Enter Result — {order.fhir.code?.text}
                 </div>
@@ -4936,7 +5067,7 @@ function ResultsView({patient,keys,relay,category}:{
                           <option value="critical">CRIT</option>
                         </select>
                         <button onClick={()=>setAnalytes(a=>a.length>1?a.filter((_,i)=>i!==idx):a)}
-                          style={{background:"transparent",border:"none",color:"#475569",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+                          style={{background:"transparent",border:"none",color:"var(--text-label)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
                       </div>
                     ))}
                     <Btn small col="#475569" onClick={()=>setAnalytes(a=>[...a,newRow()])}>+ Add Row</Btn>
@@ -4990,7 +5121,7 @@ function ResultsView({patient,keys,relay,category}:{
                 )}
 
                 <div style={{display:"flex",gap:8,alignItems:"center",marginTop:10}}>
-                  <Btn solid col="#4ade80"
+                  <Btn solid col="var(--accent-green)"
                     disabled={saving||(category==="lab"?analytes.filter(a=>a.name.trim()&&a.value.trim()).length===0:!resultForm.resultText.trim())}
                     onClick={()=>saveResult(order)}>
                     {saving?"⏳ Saving…":"✓ Save Result"}
@@ -5013,9 +5144,9 @@ function ResultsView({patient,keys,relay,category}:{
           {category==="imaging"?"🩻 Imaging":"🧪 Labs"}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {saveStatus==="saved"&&<Badge t="✓ Saved" col="#4ade80" bg="#052e16"/>}
-          {pending.length>0&&<Badge t={`${pending.length} pending`} col="#f59e0b" bg="#1c1200"/>}
-          <Btn small solid col="#4ade80" onClick={()=>{
+          {saveStatus==="saved"&&<Badge t="✓ Saved" col="var(--accent-green)" bg="var(--tint-green)"/>}
+          {pending.length>0&&<Badge t={`${pending.length} pending`} col="#f59e0b" bg="var(--tint-amber)"/>}
+          <Btn small solid col="var(--accent-green)" onClick={()=>{
             setStandaloneMode(!standaloneMode);setEntering(false);
             setStandaloneForm({test:"",customTest:""});
             setResultForm(emptyResultForm);setAnalytes([newRow()]);
@@ -5027,7 +5158,7 @@ function ResultsView({patient,keys,relay,category}:{
 
       {/* ── Standalone result entry (no linked order) ── */}
       {standaloneMode&&(
-        <div style={{...S.card,marginBottom:16,border:"1px solid #166534",background:"#0a1628"}}>
+        <div style={{...S.card,marginBottom:16,border:"1px solid var(--border)",background:"var(--bg-deep)"}}>
           <div style={{fontWeight:600,fontSize:13,marginBottom:10}}>
             📋 Enter Result — No Linked Order
           </div>
@@ -5096,7 +5227,7 @@ function ResultsView({patient,keys,relay,category}:{
                     <option value="critical">CRIT</option>
                   </select>
                   <button onClick={()=>setAnalytes(a=>a.length>1?a.filter((_,i)=>i!==idx):a)}
-                    style={{background:"transparent",border:"none",color:"#475569",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+                    style={{background:"transparent",border:"none",color:"var(--text-label)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
                 </div>
               ))}
               <Btn small col="#475569" onClick={()=>setAnalytes(a=>[...a,newRow()])}>+ Add Row</Btn>
@@ -5151,7 +5282,7 @@ function ResultsView({patient,keys,relay,category}:{
             </div>
           )}
           <div style={{display:"flex",gap:8,alignItems:"center",marginTop:10}}>
-            <Btn solid col="#4ade80"
+            <Btn solid col="var(--accent-green)"
               disabled={saving||!(standaloneForm.test==="custom"?standaloneForm.customTest.trim():standaloneForm.test)||(category==="lab"?analytes.filter(a=>a.name.trim()&&a.value.trim()).length===0:!resultForm.resultText.trim())}
               onClick={saveStandaloneResult}>
               {saving?"⏳ Saving…":"✓ Save Result"}
@@ -5162,7 +5293,7 @@ function ResultsView({patient,keys,relay,category}:{
       )}
 
       {orders.length===0&&!standaloneMode&&(
-        <div style={{...S.card,color:"#334155",textAlign:"center",padding:32}}>
+        <div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:32}}>
           No {category==="imaging"?"imaging":"lab"} orders or results yet
         </div>
       )}
@@ -5170,7 +5301,7 @@ function ResultsView({patient,keys,relay,category}:{
       {/* Pending section */}
       {pending.length>0&&(
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:10,color:"#475569",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:6}}>
+          <div style={{fontSize:10,color:"var(--text-label)",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:6}}>
             Pending
           </div>
           {pending.map(renderOrder)}
@@ -5180,7 +5311,7 @@ function ResultsView({patient,keys,relay,category}:{
       {/* Resulted section */}
       {resulted.length>0&&(
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:10,color:"#475569",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:6}}>
+          <div style={{fontSize:10,color:"var(--text-label)",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:6}}>
             Resulted
           </div>
           {resulted.map(renderOrder)}
@@ -5190,7 +5321,7 @@ function ResultsView({patient,keys,relay,category}:{
       {/* Cancelled section */}
       {cancelled.length>0&&(
         <div style={{opacity:0.5}}>
-          <div style={{fontSize:10,color:"#475569",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:6}}>
+          <div style={{fontSize:10,color:"var(--text-label)",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:6}}>
             Cancelled
           </div>
           {cancelled.map(renderOrder)}
@@ -5474,27 +5605,27 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
 
   // ── Status badge helper ──
   const statusBadge=(s:OrderStatus)=>{
-    if(s==="resulted") return <Badge t="✓ Resulted" col="#4ade80" bg="#052e16"/>;
-    if(s==="cancelled")return <Badge t="Cancelled"  col="#64748b" bg="#0f172a"/>;
-    return <Badge t="Pending" col="#f59e0b" bg="#1c1200"/>;
+    if(s==="resulted") return <Badge t="✓ Resulted" col="var(--accent-green)" bg="var(--tint-green)"/>;
+    if(s==="cancelled")return <Badge t="Cancelled"  col="#64748b" bg="var(--bg-app)"/>;
+    return <Badge t="Pending" col="#f59e0b" bg="var(--tint-amber)"/>;
   };
 
   // ── Interpretation badge ──
   const interpBadge=(i:string)=>{
-    if(i==="critical") return <Badge t="⚠ Critical" col="#f87171" bg="#1c0a0a"/>;
-    if(i==="abnormal") return <Badge t="Abnormal"   col="#fbbf24" bg="#1c1200"/>;
-    return <Badge t="Normal" col="#4ade80" bg="#052e16"/>;
+    if(i==="critical") return <Badge t="⚠ Critical" col="#f87171" bg="var(--tint-red)"/>;
+    if(i==="abnormal") return <Badge t="Abnormal"   col="#fbbf24" bg="var(--tint-amber)"/>;
+    return <Badge t="Normal" col="var(--accent-green)" bg="var(--tint-green)"/>;
   };
 
   const subTabStyle=(active:boolean)=>({
     padding:"6px 14px",border:"none",cursor:"pointer",fontFamily:"inherit",
-    background:active?"#1e293b":"transparent",
-    borderRadius:6,color:active?"#e0f2fe":"#64748b",fontSize:12,fontWeight:active?600:400,
+    background:active?"var(--bg-card)":"transparent",
+    borderRadius:6,color:active?"var(--tab-active)":"var(--text-muted)",fontSize:12,fontWeight:active?600:400,
   } as React.CSSProperties);
 
   // ── Order form for lab / imaging ──
   const renderLabForm=()=>(
-    <div style={{...S.card,marginBottom:12,border:"1px solid #1e3a5f"}}>
+    <div style={{...S.card,marginBottom:12,border:"1px solid var(--border-accent)"}}>
       <div style={{fontWeight:600,fontSize:13,marginBottom:12}}>
         {orderTab==="lab"?"🧪 New Lab Order":"🩻 New Imaging Order"}
       </div>
@@ -5563,7 +5694,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
 
   // ── Rx order form ──
   const renderRxForm=()=>(
-    <div style={{...S.card,marginBottom:12,border:"1px solid #1e3a5f"}}>
+    <div style={{...S.card,marginBottom:12,border:"1px solid var(--border-accent)"}}>
       <div style={{fontWeight:600,fontSize:13,marginBottom:12}}>💊 New Prescription</div>
       <div style={{marginBottom:8}}>
         <label style={S.lbl}>Drug / Strength / Formulation</label>
@@ -5572,7 +5703,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
           {allergyWarning && (
           <div style={{
             marginTop:6, padding:"8px 12px", borderRadius:8,
-            background:"#7f1d1d", border:"1px solid #dc2626",
+            background:"var(--tint-red)", border:"1px solid var(--tint-red-border)",
             display:"flex", alignItems:"center", gap:8,
           }}>
             <span style={{fontSize:18}}>⚠️</span>
@@ -5658,7 +5789,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
 
   // ── Result entry form ──
   const renderResultForm=(order:any)=>(
-    <div style={{...S.card,marginTop:12,border:"1px solid #1e3a5f",background:"#0a1628"}}>
+    <div style={{...S.card,marginTop:12,border:"1px solid var(--border-accent)",background:"var(--bg-deep)"}}>
       <div style={{fontWeight:600,fontSize:12,marginBottom:10}}>
         📋 Enter Result — {order.fhir.code?.text||order.fhir.drug}
       </div>
@@ -5701,7 +5832,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
         </div>
       )}
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <Btn solid col="#4ade80"
+        <Btn solid col="var(--accent-green)"
           disabled={saving||!resultForm.resultText.trim()}
           onClick={saveResult}>
           {saving?"⏳ Saving…":"✓ Save Result"}
@@ -5715,7 +5846,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
   // ── Order detail pane ──
   const renderDetail=(order:any)=>{
     const isRx=order.fhir.resourceType==="RxOrder";
-    const borderCol=order.status==="resulted"?"#4ade80":order.status==="cancelled"?"#475569":"#f59e0b";
+    const borderCol=order.status==="resulted"?"var(--accent-green)":order.status==="cancelled"?"var(--text-label)":"#f59e0b";
     return(
       <div style={{...S.card,borderLeft:`3px solid ${borderCol}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
@@ -5723,7 +5854,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
             <div style={{fontWeight:700,fontSize:14}}>
               {isRx?"💊":order.fhir.category==="imaging"?"🩻":"🧪"} {order.fhir.code?.text||order.fhir.drug}
             </div>
-            <div style={{color:"#64748b",fontSize:10,marginTop:3}}>
+            <div style={{color:"var(--text-muted)",fontSize:10,marginTop:3}}>
               {new Date(order.event.created_at*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
               {order.fhir.priority==="stat"&&<span style={{color:"#f87171",marginLeft:8,fontWeight:700}}>STAT</span>}
             </div>
@@ -5732,8 +5863,8 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
             {statusBadge(order.status)}
             {order.status==="active"&&(
               <button onClick={()=>cancelOrder(order.event.id,order.fhir.resourceType)} style={{
-                background:"transparent",color:"#475569",cursor:"pointer",
-                fontSize:11,padding:"2px 6px",borderRadius:4,border:"1px solid #334155"
+                background:"transparent",color:"var(--text-label)",cursor:"pointer",
+                fontSize:11,padding:"2px 6px",borderRadius:4,border:"1px solid var(--border)"
               }}>Cancel order</button>
             )}
           </div>
@@ -5761,7 +5892,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
 
         {/* Rx-specific fields */}
         {isRx&&(
-          <div style={{...S.card,background:"#0a1628",padding:"10px 12px",marginBottom:10}}>
+          <div style={{...S.card,background:"var(--bg-deep)",padding:"10px 12px",marginBottom:10}}>
             <div style={{...S.grid2,gap:8}}>
               {order.fhir.dose&&<div><span style={S.lbl}>Dose</span><div style={{fontSize:12}}>{order.fhir.dose}</div></div>}
               {order.fhir.route&&<div><span style={S.lbl}>Route</span><div style={{fontSize:12,textTransform:"capitalize"}}>{order.fhir.route}</div></div>}
@@ -5773,7 +5904,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
             {order.fhir.sig&&(
               <div style={{marginTop:8}}>
                 <span style={S.lbl}>Sig</span>
-                <div style={{fontSize:12,fontStyle:"italic",color:"#cbd5e1"}}>{order.fhir.sig}</div>
+                <div style={{fontSize:12,fontStyle:"italic",color:"var(--text-primary)"}}>{order.fhir.sig}</div>
               </div>
             )}
           </div>
@@ -5781,12 +5912,12 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
 
         {/* Result (if resulted) */}
         {order.result&&(
-          <div style={{...S.card,background:"#0a1628",border:"1px solid #166534",padding:"10px 12px"}}>
+          <div style={{...S.card,background:"var(--bg-deep)",border:"1px solid var(--border)",padding:"10px 12px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
               <div style={{fontWeight:600,fontSize:12}}>Result</div>
               <div style={{display:"flex",gap:6,alignItems:"center"}}>
                 {interpBadge(order.result.fhir.interpretation)}
-                <span style={{color:"#475569",fontSize:10}}>
+                <span style={{color:"var(--text-label)",fontSize:10}}>
                   {new Date(order.result.event.created_at*1000).toLocaleDateString()}
                 </span>
               </div>
@@ -5806,7 +5937,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
         {/* Enter result button */}
         {order.status==="active"&&!entering&&!isRx&&(
           <div style={{marginTop:10}}>
-            <Btn solid col="#4ade80" small onClick={()=>{setEntering(true);setResultForm(emptyResultForm);}}>
+            <Btn solid col="var(--accent-green)" small onClick={()=>{setEntering(true);setResultForm(emptyResultForm);}}>
               + Enter Result
             </Btn>
           </div>
@@ -5831,12 +5962,12 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
             <button key={t} onClick={()=>{setOrderTab(t);setSelectedId(null);setAdding(false);setEntering(false);}}
               style={subTabStyle(orderTab===t)}>
               {t==="lab"?"🧪 Lab":t==="imaging"?"🩻 Imaging":"💊 Rx"}
-              {counts[t]>0&&<span style={{marginLeft:5,fontSize:10,color:"#475569"}}>({counts[t]})</span>}
+              {counts[t]>0&&<span style={{marginLeft:5,fontSize:10,color:"var(--text-label)"}}>({counts[t]})</span>}
             </button>
           ))}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {saveStatus==="saved"&&<Badge t="✓ Saved" col="#4ade80" bg="#052e16"/>}
+          {saveStatus==="saved"&&<Badge t="✓ Saved" col="var(--accent-green)" bg="var(--tint-green)"/>}
           {((orderTab==="rx"&&canDo("prescribe"))||(orderTab!=="rx"&&canDo("order")))&&(
           <Btn small solid col={orderTab==="rx"?"#a78bfa":"#0ea5e9"}
             onClick={()=>{setAdding(!adding);setSelectedId(null);setEntering(false);}}>
@@ -5850,7 +5981,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
 
       {/* Empty state */}
       {!adding&&visibleOrders.length===0&&(
-        <div style={{...S.card,color:"#334155",textAlign:"center",padding:32}}>
+        <div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:32}}>
           {`No pending ${orderTab==="lab"?"lab":"imaging"} orders`}
         </div>
       )}
@@ -5867,9 +5998,9 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
           style={{
             ...S.card,
             cursor:"pointer",
-            borderLeft:`3px solid ${order.status==="resulted"?"#4ade80":order.status==="cancelled"?"#334155":"#f59e0b"}`,
+            borderLeft:`3px solid ${order.status==="resulted"?"var(--accent-green)":order.status==="cancelled"?"var(--text-faint)":"#f59e0b"}`,
             opacity:order.status==="cancelled"?0.5:1,
-            background:selectedId===order.event.id?"#162032":"#1e293b",
+            background:selectedId===order.event.id?"var(--bg-hover)":"var(--bg-card)",
           }}>
           {/* Collapsed row */}
           {selectedId!==order.event.id&&(
@@ -5880,7 +6011,7 @@ function OrdersView({patient,keys,relay,autoOpen,onAutoOpenConsumed}:{
                   {order.fhir.priority==="stat"&&
                     <span style={{color:"#f87171",fontSize:10,marginLeft:6,fontWeight:700}}>STAT</span>}
                 </div>
-                <div style={{color:"#475569",fontSize:10,marginTop:2}}>
+                <div style={{color:"var(--text-label)",fontSize:10,marginTop:2}}>
                   {new Date(order.event.created_at*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                   {order.fhir.reasonCode?.[0]?.text&&` · ${order.fhir.reasonCode[0].text}`}
                   {order.fhir.indication&&` · ${order.fhir.indication}`}
@@ -5972,10 +6103,10 @@ function HealthMaintenanceView({patient,keys,relay}:{patient:Patient;keys:Keypai
   // Status colors
   const statusColor=(status:string)=>{
     switch(status){
-      case "up_to_date":case "complete": return "#4ade80"; // green
+      case "up_to_date":case "complete": return "var(--accent-green)"; // green
       case "due":case "overdue": return "#facc15";          // yellow
-      case "not_yet": return "#475569";                     // gray
-      default: return "#475569";
+      case "not_yet": return "var(--text-label)";                     // gray
+      default: return "var(--text-label)";
     }
   };
   const statusIcon=(status:string)=>{
@@ -6006,21 +6137,21 @@ function HealthMaintenanceView({patient,keys,relay}:{patient:Patient;keys:Keypai
   // Summary counts
   const dueCount=dueVaccines.length+(wellCheckEval.status==="due"||wellCheckEval.status==="overdue"?1:0);
 
-  if(loading) return <div style={S.card}><div style={{color:"#64748b",fontSize:12}}>Loading health maintenance data...</div></div>;
+  if(loading) return <div style={S.card}><div style={{color:"var(--text-muted)",fontSize:12}}>Loading health maintenance data...</div></div>;
 
   return(
     <div>
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14}}>🩺 Health Maintenance</div>
-        <div style={{fontSize:11,color:"#64748b"}}>{patient.name} · {age.display}</div>
+        <div style={{fontSize:11,color:"var(--text-muted)"}}>{patient.name} · {age.display}</div>
       </div>
 
       {/* Summary banner */}
       <div style={{
         ...S.card,
-        background:dueCount>0?"#422006":"#052e16",
-        border:`1px solid ${dueCount>0?"#854d0e":"#166534"}`,
+        background:dueCount>0?"var(--tint-amber)":"var(--tint-green)",
+        border:`1px solid ${dueCount>0?"var(--tint-amber-border)":"var(--tint-green-border)"}`,
         marginBottom:14,
       }}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -6033,10 +6164,10 @@ function HealthMaintenanceView({patient,keys,relay}:{patient:Patient;keys:Keypai
             {dueCount>0?dueCount:"✓"}
           </div>
           <div>
-            <div style={{fontWeight:600,fontSize:13,color:dueCount>0?"#fde68a":"#bbf7d0"}}>
+            <div style={{fontWeight:600,fontSize:13,color:dueCount>0?"var(--accent-amber-text)":"var(--accent-green-text)"}}>
               {dueCount>0?`${dueCount} item${dueCount>1?"s":""} due`:"All up to date"}
             </div>
-            <div style={{fontSize:11,color:dueCount>0?"#fbbf24aa":"#4ade80aa",marginTop:2}}>
+            <div style={{fontSize:11,color:dueCount>0?"var(--accent-amber-sub)":"var(--accent-green)",marginTop:2}}>
               {dueCount>0?"Action needed at next visit":"No preventive items are overdue"}
             </div>
           </div>
@@ -6055,9 +6186,9 @@ function HealthMaintenanceView({patient,keys,relay}:{patient:Patient;keys:Keypai
               <span style={{color:statusColor(wellCheckEval.status),marginRight:6}}>{statusIcon(wellCheckEval.status)}</span>
               Well-Child Visit
             </div>
-            <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>{wellCheckEval.message}</div>
+            <div style={{fontSize:11,color:"var(--text-secondary)",marginTop:3}}>{wellCheckEval.message}</div>
             {wellCheckEval.lastVisitDate&&(
-              <div style={{fontSize:10,color:"#64748b",marginTop:2}}>Last visit: {new Date(wellCheckEval.lastVisitDate).toLocaleDateString()}</div>
+              <div style={{fontSize:10,color:"var(--text-muted)",marginTop:2}}>Last visit: {new Date(wellCheckEval.lastVisitDate).toLocaleDateString()}</div>
             )}
           </div>
           <Badge
@@ -6083,7 +6214,7 @@ function HealthMaintenanceView({patient,keys,relay}:{patient:Patient;keys:Keypai
       {/* ── Up to Date (Green) ────────────────────────────────────────── */}
       {upToDateVaccines.length>0&&(
         <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#4ade80",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>
+          <div style={{fontSize:11,fontWeight:700,color:"var(--accent-green)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>
             ✓ Up to Date ({upToDateVaccines.length})
           </div>
           {upToDateVaccines.map(ev=>(
@@ -6095,7 +6226,7 @@ function HealthMaintenanceView({patient,keys,relay}:{patient:Patient;keys:Keypai
       {/* ── Not Yet Due (Gray) ────────────────────────────────────────── */}
       {notYetVaccines.length>0&&(
         <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>
+          <div style={{fontSize:11,fontWeight:700,color:"var(--text-label)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>
             ○ Not Yet Due ({notYetVaccines.length})
           </div>
           {notYetVaccines.map(ev=>(
@@ -6129,27 +6260,27 @@ function VaccineRow({ev,statusColor,statusIcon,statusLabel}:{
           <span style={{color:col,fontSize:12,fontWeight:700,width:18,textAlign:"center"}}>{statusIcon(ev.status)}</span>
           <div>
             <div style={{fontWeight:600,fontSize:12}}>{ev.series.name}</div>
-            <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>{ev.message}</div>
+            <div style={{fontSize:10,color:"var(--text-secondary)",marginTop:1}}>{ev.message}</div>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{fontSize:10,color:"#64748b"}}>{ev.dosesGiven}/{ev.dosesRequired}</div>
+          <div style={{fontSize:10,color:"var(--text-muted)"}}>{ev.dosesGiven}/{ev.dosesRequired}</div>
           <Badge t={statusLabel(ev.status)} col={col} bg={col+"18"}/>
-          <span style={{color:"#475569",fontSize:10}}>{expanded?"▼":"▶"}</span>
+          <span style={{color:"var(--text-label)",fontSize:10}}>{expanded?"▼":"▶"}</span>
         </div>
       </div>
 
       {expanded&&(
-        <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #334155"}}>
+        <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid var(--border)"}}>
           {/* Dose history */}
           {ev.datesGiven.length>0&&(
             <div style={{marginBottom:6}}>
-              <div style={{fontSize:10,color:"#64748b",marginBottom:4}}>Doses received:</div>
+              <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:4}}>Doses received:</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {ev.datesGiven.map((date,i)=>(
                   <div key={i} style={{
-                    background:"#4ade8015",border:"1px solid #4ade8035",
-                    borderRadius:6,padding:"3px 8px",fontSize:10,color:"#4ade80",
+                    background:"var(--tint-green)",border:"1px solid var(--tint-green-border)",
+                    borderRadius:6,padding:"3px 8px",fontSize:10,color:"var(--accent-green)",
                   }}>
                     Dose {i+1}: {new Date(date).toLocaleDateString()}
                   </div>
@@ -6167,7 +6298,7 @@ function VaccineRow({ev,statusColor,statusIcon,statusLabel}:{
 
           {/* Notes */}
           {ev.series.notes&&(
-            <div style={{fontSize:10,color:"#64748b",fontStyle:"italic",marginTop:4}}>{ev.series.notes}</div>
+            <div style={{fontSize:10,color:"var(--text-muted)",fontStyle:"italic",marginTop:4}}>{ev.series.notes}</div>
           )}
         </div>
       )}
@@ -6199,7 +6330,7 @@ const TL_META: Record<TimelineEventType,{icon:string;color:string;label:string}>
   observation:  {icon:"📏",color:"#06b6d4",label:"Vitals"},
   condition:    {icon:"🩺",color:"#f59e0b",label:"Conditions"},
   allergy:      {icon:"⚠️",color:"#f87171",label:"Allergies"},
-  immunization: {icon:"💉",color:"#4ade80",label:"Immunizations"},
+  immunization: {icon:"💉",color:"var(--accent-green)",label:"Immunizations"},
   lab:          {icon:"🔬",color:"#fbbf24",label:"Labs"},
   imaging:      {icon:"🩻",color:"#e879f9",label:"Imaging"},
 };
@@ -6449,8 +6580,8 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14}}>📜 Patient Timeline</div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {loading&&<span style={{color:"#475569",fontSize:11}}>Loading…</span>}
-          <Badge t={`${filtered.length} events`} col="#7dd3fc" bg="#0c1a2e"/>
+          {loading&&<span style={{color:"var(--text-label)",fontSize:11}}>Loading…</span>}
+          <Badge t={`${filtered.length} events`} col="#7dd3fc" bg="var(--bg-inset)"/>
         </div>
       </div>
 
@@ -6463,9 +6594,9 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
             <button key={type} onClick={()=>setFilters(f=>({...f,[type]:!f[type]}))}
               style={{
                 padding:"3px 10px",borderRadius:99,
-                border:`1px solid ${active?meta.color+"55":"#1e293b"}`,
+                border:`1px solid ${active?meta.color+"55":"var(--border-subtle)"}`,
                 background:active?meta.color+"15":"transparent",
-                color:active?meta.color:"#334155",
+                color:active?meta.color:"var(--text-faint)",
                 fontSize:10,fontWeight:500,cursor:"pointer",fontFamily:"inherit",
                 opacity:count===0?0.4:1,
               }}>
@@ -6477,7 +6608,7 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
 
       {/* Empty state */}
       {!loading&&filtered.length===0&&(
-        <div style={{...S.card,color:"#334155",textAlign:"center",padding:32}}>
+        <div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:32}}>
           {entries.length===0?"No events recorded for this patient":"No events match the current filters"}
         </div>
       )}
@@ -6487,7 +6618,7 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
         {/* Vertical line */}
         <div style={{
           position:"absolute",left:9,top:0,bottom:0,width:2,
-          background:"linear-gradient(to bottom, #334155 0%, #1e293b 100%)",
+          background:"linear-gradient(to bottom, var(--border) 0%, var(--bg-card) 100%)",
           borderRadius:1,
         }}/>
 
@@ -6500,11 +6631,11 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
             }}>
               <div style={{
                 width:20,height:20,borderRadius:"50%",
-                background:"#0f172a",border:"2px solid #334155",
+                background:"var(--bg-app)",border:"2px solid var(--border)",
                 display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:8,color:"#64748b",zIndex:1,flexShrink:0,
+                fontSize:8,color:"var(--text-muted)",zIndex:1,flexShrink:0,
               }}>⬤</div>
-              <div style={{fontSize:11,fontWeight:700,color:"#64748b",letterSpacing:"0.3px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--text-muted)",letterSpacing:"0.3px"}}>
                 {formatDayHeader(dayKey)}
               </div>
             </div>
@@ -6517,7 +6648,7 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
                   onClick={()=>setExpandedId(id=>id===entry.id?null:entry.id)}
                   style={{
                     position:"relative",marginBottom:4,marginLeft:4,
-                    background:isExpanded?"#162032":"#1e293b",
+                    background:isExpanded?"var(--bg-hover)":"var(--bg-card)",
                     border:`1px solid ${isExpanded?entry.color+"40":"#131c2e"}`,
                     borderLeft:`3px solid ${entry.color}`,
                     borderRadius:8,padding:"8px 12px",cursor:"pointer",
@@ -6525,14 +6656,14 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:13,flexShrink:0}}>{entry.icon}</span>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:600,fontSize:12,color:"#e2e8f0",
+                      <div style={{fontWeight:600,fontSize:12,color:"var(--text-primary)",
                         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
                       }}>{entry.title}</div>
-                      <div style={{fontSize:10,color:"#94a3b8",marginTop:1,
+                      <div style={{fontSize:10,color:"var(--text-secondary)",marginTop:1,
                         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
                       }}>{entry.subtitle}</div>
                     </div>
-                    <div style={{fontSize:10,color:"#475569",flexShrink:0,textAlign:"right"}}>
+                    <div style={{fontSize:10,color:"var(--text-label)",flexShrink:0,textAlign:"right"}}>
                       {entry.date.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}
                     </div>
                   </div>
@@ -6542,24 +6673,24 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
                     <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${entry.color}20`}}>
                       {entry.type==="encounter"&&entry.detail&&(
                         <pre style={{
-                          fontSize:11,color:"#cbd5e1",lineHeight:1.6,
+                          fontSize:11,color:"var(--text-primary)",lineHeight:1.6,
                           whiteSpace:"pre-wrap",wordBreak:"break-word",
                           fontFamily:"'IBM Plex Mono',monospace",
-                          background:"#0f172a",borderRadius:6,padding:10,
+                          background:"var(--bg-app)",borderRadius:6,padding:10,
                           maxHeight:400,overflowY:"auto",margin:0,
                         }}>{entry.detail}</pre>
                       )}
                       {entry.type==="medication"&&(
-                        <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.7}}>
-                          {entry.fhir.drug&&<div><span style={{color:"#64748b"}}>Drug:</span> {entry.fhir.drug}</div>}
-                          {entry.fhir.dose&&<div><span style={{color:"#64748b"}}>Dose:</span> {entry.fhir.dose}</div>}
-                          {entry.fhir.sig&&<div><span style={{color:"#64748b"}}>Sig:</span> {entry.fhir.sig}</div>}
-                          {entry.fhir.route&&<div><span style={{color:"#64748b"}}>Route:</span> {entry.fhir.route}</div>}
-                          {entry.fhir.qty&&<div><span style={{color:"#64748b"}}>Qty:</span> {entry.fhir.qty}</div>}
-                          {(entry.fhir.refills!=null)&&<div><span style={{color:"#64748b"}}>Refills:</span> {entry.fhir.refills}</div>}
-                          {entry.fhir.pharmacy&&<div><span style={{color:"#64748b"}}>Pharmacy:</span> {entry.fhir.pharmacy}</div>}
-                          {entry.fhir.indication&&<div><span style={{color:"#64748b"}}>Indication:</span> {entry.fhir.indication}</div>}
-                          <div><span style={{color:"#64748b"}}>Status:</span> {entry.fhir.status}</div>
+                        <div style={{fontSize:11,color:"var(--text-primary)",lineHeight:1.7}}>
+                          {entry.fhir.drug&&<div><span style={{color:"var(--text-muted)"}}>Drug:</span> {entry.fhir.drug}</div>}
+                          {entry.fhir.dose&&<div><span style={{color:"var(--text-muted)"}}>Dose:</span> {entry.fhir.dose}</div>}
+                          {entry.fhir.sig&&<div><span style={{color:"var(--text-muted)"}}>Sig:</span> {entry.fhir.sig}</div>}
+                          {entry.fhir.route&&<div><span style={{color:"var(--text-muted)"}}>Route:</span> {entry.fhir.route}</div>}
+                          {entry.fhir.qty&&<div><span style={{color:"var(--text-muted)"}}>Qty:</span> {entry.fhir.qty}</div>}
+                          {(entry.fhir.refills!=null)&&<div><span style={{color:"var(--text-muted)"}}>Refills:</span> {entry.fhir.refills}</div>}
+                          {entry.fhir.pharmacy&&<div><span style={{color:"var(--text-muted)"}}>Pharmacy:</span> {entry.fhir.pharmacy}</div>}
+                          {entry.fhir.indication&&<div><span style={{color:"var(--text-muted)"}}>Indication:</span> {entry.fhir.indication}</div>}
+                          <div><span style={{color:"var(--text-muted)"}}>Status:</span> {entry.fhir.status}</div>
                         </div>
                       )}
                       {entry.type==="observation"&&Array.isArray(entry.fhir)&&(
@@ -6580,37 +6711,37 @@ function TimelineView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;re
                         </div>
                       )}
                       {entry.type==="condition"&&(
-                        <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.7}}>
+                        <div style={{fontSize:11,color:"var(--text-primary)",lineHeight:1.7}}>
                           {entry.fhir.code?.coding?.map((c:any,i:number)=>(
-                            <div key={i}><span style={{color:"#64748b"}}>{c.system?.includes("icd")?"ICD-10":"SNOMED"}:</span> {c.code} — {c.display}</div>
+                            <div key={i}><span style={{color:"var(--text-muted)"}}>{c.system?.includes("icd")?"ICD-10":"SNOMED"}:</span> {c.code} — {c.display}</div>
                           ))}
-                          {entry.fhir.severity?.coding?.[0]?.display&&<div><span style={{color:"#64748b"}}>Severity:</span> {entry.fhir.severity.coding[0].display}</div>}
-                          {entry.fhir.note?.[0]?.text&&<div><span style={{color:"#64748b"}}>Note:</span> {entry.fhir.note[0].text}</div>}
+                          {entry.fhir.severity?.coding?.[0]?.display&&<div><span style={{color:"var(--text-muted)"}}>Severity:</span> {entry.fhir.severity.coding[0].display}</div>}
+                          {entry.fhir.note?.[0]?.text&&<div><span style={{color:"var(--text-muted)"}}>Note:</span> {entry.fhir.note[0].text}</div>}
                         </div>
                       )}
                       {entry.type==="allergy"&&(
-                        <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.7}}>
-                          {entry.fhir.reaction?.[0]?.manifestation?.[0]?.text&&<div><span style={{color:"#64748b"}}>Reaction:</span> {entry.fhir.reaction[0].manifestation[0].text}</div>}
-                          {entry.fhir.reaction?.[0]?.severity&&<div><span style={{color:"#64748b"}}>Severity:</span> {entry.fhir.reaction[0].severity}</div>}
+                        <div style={{fontSize:11,color:"var(--text-primary)",lineHeight:1.7}}>
+                          {entry.fhir.reaction?.[0]?.manifestation?.[0]?.text&&<div><span style={{color:"var(--text-muted)"}}>Reaction:</span> {entry.fhir.reaction[0].manifestation[0].text}</div>}
+                          {entry.fhir.reaction?.[0]?.severity&&<div><span style={{color:"var(--text-muted)"}}>Severity:</span> {entry.fhir.reaction[0].severity}</div>}
                         </div>
                       )}
                       {entry.type==="immunization"&&(
-                        <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.7}}>
-                          <div><span style={{color:"#64748b"}}>Vaccine:</span> {entry.fhir.vaccineCode?.text}</div>
-                          {entry.fhir.doseQuantity?.value&&<div><span style={{color:"#64748b"}}>Dose #:</span> {entry.fhir.doseQuantity.value}</div>}
-                          <div><span style={{color:"#64748b"}}>Date given:</span> {new Date(entry.fhir.occurrenceDateTime).toLocaleDateString()}</div>
+                        <div style={{fontSize:11,color:"var(--text-primary)",lineHeight:1.7}}>
+                          <div><span style={{color:"var(--text-muted)"}}>Vaccine:</span> {entry.fhir.vaccineCode?.text}</div>
+                          {entry.fhir.doseQuantity?.value&&<div><span style={{color:"var(--text-muted)"}}>Dose #:</span> {entry.fhir.doseQuantity.value}</div>}
+                          <div><span style={{color:"var(--text-muted)"}}>Date given:</span> {new Date(entry.fhir.occurrenceDateTime).toLocaleDateString()}</div>
                         </div>
                       )}
                       {(entry.type==="lab"||entry.type==="imaging")&&(
-                        <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.7}}>
-                          {entry.fhir.priority&&<div><span style={{color:"#64748b"}}>Priority:</span> {entry.fhir.priority}</div>}
-                          {entry.fhir.reasonCode?.[0]?.text&&<div><span style={{color:"#64748b"}}>Indication:</span> {entry.fhir.reasonCode[0].text}</div>}
-                          {entry.fhir.note?.[0]?.text&&<div><span style={{color:"#64748b"}}>Instructions:</span> {entry.fhir.note[0].text}</div>}
+                        <div style={{fontSize:11,color:"var(--text-primary)",lineHeight:1.7}}>
+                          {entry.fhir.priority&&<div><span style={{color:"var(--text-muted)"}}>Priority:</span> {entry.fhir.priority}</div>}
+                          {entry.fhir.reasonCode?.[0]?.text&&<div><span style={{color:"var(--text-muted)"}}>Indication:</span> {entry.fhir.reasonCode[0].text}</div>}
+                          {entry.fhir.note?.[0]?.text&&<div><span style={{color:"var(--text-muted)"}}>Instructions:</span> {entry.fhir.note[0].text}</div>}
                           {entry.detail&&(
                             <pre style={{
-                              fontSize:10,color:"#94a3b8",lineHeight:1.5,
+                              fontSize:10,color:"var(--text-secondary)",lineHeight:1.5,
                               whiteSpace:"pre-wrap",fontFamily:"'IBM Plex Mono',monospace",
-                              background:"#0f172a",borderRadius:6,padding:8,marginTop:4,
+                              background:"var(--bg-app)",borderRadius:6,padding:8,marginTop:4,
                             }}>{entry.detail}</pre>
                           )}
                         </div>
@@ -6849,14 +6980,14 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
     return m[cat]||"📎";
   };
 
-  if(loading) return <div style={S.card}><div style={{color:"#64748b",fontSize:12}}>Loading documents…</div></div>;
+  if(loading) return <div style={S.card}><div style={{color:"var(--text-muted)",fontSize:12}}>Loading documents…</div></div>;
 
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14}}>📎 Documents</div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <Badge t={`${documents.length} files`} col="#7dd3fc" bg="#0c1a2e"/>
+          <Badge t={`${documents.length} files`} col="#7dd3fc" bg="var(--bg-inset)"/>
           {canDo("write")&&<Btn small solid col="#0ea5e9" onClick={()=>setShowUpload(!showUpload)}>
             {showUpload?"Cancel":"+ Upload"}
           </Btn>}
@@ -6864,7 +6995,7 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
       </div>
 
       {showUpload&&(
-        <div style={{...S.card,marginBottom:12,border:"1px solid #1e3a5f"}}>
+        <div style={{...S.card,marginBottom:12,border:"1px solid var(--border-accent)"}}>
           <div style={{fontWeight:600,fontSize:13,marginBottom:12}}>📤 Upload Document</div>
           <div style={{marginBottom:8}}>
             <label style={S.lbl}>File</label>
@@ -6872,7 +7003,7 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
               style={{...S.input,padding:6,cursor:"pointer"}}
               accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.txt,.csv,.xml,.html"/>
             {selectedFile&&(
-              <div style={{fontSize:10,color:"#64748b",marginTop:4}}>
+              <div style={{fontSize:10,color:"var(--text-muted)",marginTop:4}}>
                 {selectedFile.name} · {fmtSize(selectedFile.size)} · {selectedFile.type||"unknown type"}
               </div>
             )}
@@ -6903,12 +7034,12 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
               {uploading?"⏳ Uploading…":"🔒 Encrypt & Upload"}
             </Btn>
             {uploadProgress&&(
-              <span style={{fontSize:11,color:uploadProgress.startsWith("✓")?"#4ade80":uploadProgress.startsWith("✗")?"#f87171":"#94a3b8"}}>
+              <span style={{fontSize:11,color:uploadProgress.startsWith("✓")?"var(--accent-green)":uploadProgress.startsWith("✗")?"#f87171":"var(--text-secondary)"}}>
                 {uploadProgress}
               </span>
             )}
           </div>
-          <div style={{fontSize:10,color:"#475569",marginTop:8,lineHeight:1.5}}>
+          <div style={{fontSize:10,color:"var(--text-label)",marginTop:8,lineHeight:1.5}}>
             🌸 Files are encrypted client-side with AES-256-GCM before upload to your self-hosted
             Blossom server (NIP-B7). The decryption key is stored in the patient's encrypted
             Nostr event — only you and the patient can access it.
@@ -6917,7 +7048,7 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
       )}
 
       {documents.length===0&&!showUpload&&(
-        <div style={{...S.card,color:"#334155",textAlign:"center",padding:32}}>
+        <div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:32}}>
           No documents attached to this patient's chart
         </div>
       )}
@@ -6929,7 +7060,7 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
         return(
           <div key={doc.event.id} style={{
             ...S.card,borderLeft:"3px solid #0ea5e9",cursor:"pointer",
-            background:isExpanded?"#162032":"#1e293b",
+            background:isExpanded?"var(--bg-hover)":"var(--bg-card)",
           }} onClick={()=>setExpandedId(id=>id===doc.event.id?null:doc.event.id)}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:18}}>{catIcon(doc.fhir.type?.text||"Other")}</span>
@@ -6937,7 +7068,7 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
                 <div style={{fontWeight:600,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {att.title||doc.fhir.description||"Untitled"}
                 </div>
-                <div style={{fontSize:10,color:"#64748b",marginTop:1}}>
+                <div style={{fontSize:10,color:"var(--text-muted)",marginTop:1}}>
                   {doc.fhir.type?.text||"Other"} · {fmtSize(att.size||0)} · {new Date(doc.fhir.date).toLocaleDateString()}
                 </div>
               </div>
@@ -6949,16 +7080,16 @@ function DocumentsView({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
               </Btn>
             </div>
             {isExpanded&&(
-              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #334155",fontSize:11,color:"#cbd5e1",lineHeight:1.7}}>
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid var(--border)",fontSize:11,color:"var(--text-primary)",lineHeight:1.7}}>
                 {doc.fhir.description&&doc.fhir.description!==att.title&&(
-                  <div><span style={{color:"#64748b"}}>Description:</span> {doc.fhir.description}</div>
+                  <div><span style={{color:"var(--text-muted)"}}>Description:</span> {doc.fhir.description}</div>
                 )}
-                <div><span style={{color:"#64748b"}}>File:</span> {att.title}</div>
-                <div><span style={{color:"#64748b"}}>Type:</span> {att.contentType}</div>
-                <div><span style={{color:"#64748b"}}>Size:</span> {fmtSize(att.size||0)}</div>
-                <div><span style={{color:"#64748b"}}>Hash:</span> <span style={{fontFamily:"monospace",fontSize:9}}>{att.hash}</span></div>
-                <div><span style={{color:"#64748b"}}>Uploaded:</span> {new Date(doc.fhir.date).toLocaleString()}</div>
-                <div style={{marginTop:6,padding:"6px 8px",background:"#0f172a",borderRadius:6,fontSize:10,color:"#475569"}}>
+                <div><span style={{color:"var(--text-muted)"}}>File:</span> {att.title}</div>
+                <div><span style={{color:"var(--text-muted)"}}>Type:</span> {att.contentType}</div>
+                <div><span style={{color:"var(--text-muted)"}}>Size:</span> {fmtSize(att.size||0)}</div>
+                <div><span style={{color:"var(--text-muted)"}}>Hash:</span> <span style={{fontFamily:"monospace",fontSize:9}}>{att.hash}</span></div>
+                <div><span style={{color:"var(--text-muted)"}}>Uploaded:</span> {new Date(doc.fhir.date).toLocaleString()}</div>
+                <div style={{marginTop:6,padding:"6px 8px",background:"var(--bg-app)",borderRadius:6,fontSize:10,color:"var(--text-label)"}}>
                   🌸 NIP-B7 Blossom · AES-256-GCM encrypted · Key in dual-encrypted Nostr event · Server stores only ciphertext
                 </div>
               </div>
@@ -6996,8 +7127,13 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
       getCachedEvents(FHIR_KINDS.Observation,patient.id),
     ]);
     const parse=(items:CachedEvent[])=>items.map(c=>{try{return JSON.parse(c.fhirJson);}catch{return null;}}).filter(Boolean);
+    const filterDeleted=(items:CachedEvent[])=>{
+      const deletedIds=new Set<string>();
+      for(const item of items){ const d=item.tags.find((t:string[])=>t[0]==="e"&&t[3]==="deletion"); if(d) deletedIds.add(d[1]); }
+      return items.filter(i=>!i.tags.find((t:string[])=>t[0]==="e"&&t[3]==="deletion")&&!deletedIds.has(i.eventId));
+    };
     setImmunizations(parse(immC));
-    setAllergies(parse(algC));
+    setAllergies(parse(filterDeleted(algC)));
     setMedications(parse(medC));
     setConditions(parse(condC));
     setObservations(parse(obsC));
@@ -7123,8 +7259,8 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
   };
 
   // ── Shared styles ─────────────────────────────────────────
-  const formCard:React.CSSProperties={...S.card,marginBottom:12,background:"#0f1d2e",border:"1px solid #1e293b"};
-  const label:React.CSSProperties={fontSize:11,color:"#94a3b8",marginBottom:4,display:"block"};
+  const formCard:React.CSSProperties={...S.card,marginBottom:12,background:"var(--bg-card)",border:"1px solid var(--border-subtle)"};
+  const label:React.CSSProperties={fontSize:11,color:"var(--text-secondary)",marginBottom:4,display:"block"};
   const inputS:React.CSSProperties={...S.input,width:"100%",boxSizing:"border-box" as const};
   const row:React.CSSProperties={display:"flex",gap:12,marginBottom:10};
 
@@ -7146,12 +7282,12 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
 
     {!activeForm&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       {forms.map(f=>(
-        <div key={f.id} onClick={()=>setActiveForm(f.id)} style={{...S.card,cursor:"pointer",background:"#0f1d2e",border:"1px solid #1e293b",transition:"all 0.15s ease"}}
-          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=f.color;(e.currentTarget as HTMLElement).style.background="#162032";}}
-          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor="#1e293b";(e.currentTarget as HTMLElement).style.background="#0f1d2e";}}>
+        <div key={f.id} onClick={()=>setActiveForm(f.id)} style={{...S.card,cursor:"pointer",background:"var(--bg-card)",border:"1px solid var(--border-subtle)",transition:"all 0.15s ease"}}
+          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=f.color;(e.currentTarget as HTMLElement).style.background="var(--bg-hover)";}}
+          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor="var(--border-subtle)";(e.currentTarget as HTMLElement).style.background="var(--bg-card)";}}>
           <div style={{fontSize:28,marginBottom:8}}>{f.icon}</div>
           <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>{f.title}</div>
-          <div style={{fontSize:11,color:"#64748b"}}>{f.desc}</div>
+          <div style={{fontSize:11,color:"var(--text-muted)"}}>{f.desc}</div>
         </div>
       ))}
     </div>}
@@ -7179,10 +7315,10 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
           </select>
         </div>
         <div style={{display:"flex",gap:16,alignItems:"flex-end",paddingBottom:4}}>
-          <label style={{fontSize:12,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+          <label style={{fontSize:12,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:4}}>
             <input type="checkbox" checked={excuseForm.amOnly} onChange={e=>setExcuseForm(p=>({...p,amOnly:e.target.checked,pmOnly:false}))}/>AM only
           </label>
-          <label style={{fontSize:12,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+          <label style={{fontSize:12,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:4}}>
             <input type="checkbox" checked={excuseForm.pmOnly} onChange={e=>setExcuseForm(p=>({...p,pmOnly:e.target.checked,amOnly:false}))}/>PM only
           </label>
         </div>
@@ -7195,11 +7331,11 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
     {/* ── Immunization Record ────────────────── */}
     {activeForm==="imm"&&<div style={formCard}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:8}}>💉 Immunization Record</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>
+      <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:12}}>
         {immEntries.length} vaccination{immEntries.length!==1?"s":""} on file.
         The PDF will include all recorded immunizations grouped by vaccine type.
       </div>
-      {immEntries.length===0&&<div style={{...S.card,background:"#1e293b",marginBottom:12,fontSize:12,color:"#f59e0b"}}>
+      {immEntries.length===0&&<div style={{...S.card,background:"var(--bg-card)",marginBottom:12,fontSize:12,color:"#f59e0b"}}>
         ⚠️ No immunizations recorded yet. Add them on the Immunizations tab first.
       </div>}
       <Btn solid col="#10b981" onClick={genImmRecord} disabled={generating||immEntries.length===0}>
@@ -7210,15 +7346,15 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
     {/* ── Sports Physical ────────────────────── */}
     {activeForm==="sports"&&<div style={formCard}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:8}}>🏃 Sports Physical (PPE)</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>
+      <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:12}}>
         Auto-fills patient demographics, vitals, allergies, medications, and conditions from the chart.
         Exam checkboxes and eligibility section are left blank for hand-completion and signature.
       </div>
-      <div style={{...S.card,background:"#1e293b",marginBottom:12,fontSize:12}}>
-        <div style={{color:"#64748b",marginBottom:6}}>Will include from chart:</div>
-        <div style={{color:"#e2e8f0"}}>Allergies: {allergyNames.length?allergyNames.join(", "):<span style={{color:"#64748b"}}>NKDA</span>}</div>
-        <div style={{color:"#e2e8f0"}}>Medications: {medNames.length?medNames.join(", "):<span style={{color:"#64748b"}}>None</span>}</div>
-        <div style={{color:"#e2e8f0"}}>Conditions: {condNames.length?condNames.join(", "):<span style={{color:"#64748b"}}>None</span>}</div>
+      <div style={{...S.card,background:"var(--bg-card)",marginBottom:12,fontSize:12}}>
+        <div style={{color:"var(--text-muted)",marginBottom:6}}>Will include from chart:</div>
+        <div style={{color:"var(--text-primary)"}}>Allergies: {allergyNames.length?allergyNames.join(", "):<span style={{color:"var(--text-muted)"}}>NKDA</span>}</div>
+        <div style={{color:"var(--text-primary)"}}>Medications: {medNames.length?medNames.join(", "):<span style={{color:"var(--text-muted)"}}>None</span>}</div>
+        <div style={{color:"var(--text-primary)"}}>Conditions: {condNames.length?condNames.join(", "):<span style={{color:"var(--text-muted)"}}>None</span>}</div>
       </div>
       <Btn solid col="#f59e0b" onClick={genSportsPhysical} disabled={generating}>
         {generating?"Generating…":"Generate PDF"}
@@ -7248,7 +7384,7 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
           <input style={inputS} value={ccForm.hoursTo} onChange={e=>setCcForm(p=>({...p,hoursTo:e.target.value}))}/>
         </div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginTop:8,marginBottom:8}}>Screening Results</div>
+      <div style={{fontSize:12,fontWeight:600,color:"var(--text-secondary)",marginTop:8,marginBottom:8}}>Screening Results</div>
       <div style={row}>
         <div style={{flex:1}}><span style={label}>Hearing</span><input style={inputS} value={ccForm.hearingNotes} onChange={e=>setCcForm(p=>({...p,hearingNotes:e.target.value}))}/></div>
         <div style={{flex:1}}><span style={label}>Vision</span><input style={inputS} value={ccForm.visionNotes} onChange={e=>setCcForm(p=>({...p,visionNotes:e.target.value}))}/></div>
@@ -7261,12 +7397,12 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
         <div style={{flex:1}}><span style={label}>Dental</span><input style={inputS} value={ccForm.dentalNotes} onChange={e=>setCcForm(p=>({...p,dentalNotes:e.target.value}))}/></div>
         <div style={{flex:1}}><span style={label}>Other</span><input style={inputS} value={ccForm.otherNotes} onChange={e=>setCcForm(p=>({...p,otherNotes:e.target.value}))}/></div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginTop:8,marginBottom:8}}>TB Screening</div>
+      <div style={{fontSize:12,fontWeight:600,color:"var(--text-secondary)",marginTop:8,marginBottom:8}}>TB Screening</div>
       <div style={{display:"flex",gap:16,marginBottom:12}}>
-        <label style={{fontSize:12,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+        <label style={{fontSize:12,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:4}}>
           <input type="checkbox" checked={ccForm.tbRiskPresent} onChange={e=>setCcForm(p=>({...p,tbRiskPresent:e.target.checked}))}/>TB risk factors present
         </label>
-        {ccForm.tbRiskPresent&&<label style={{fontSize:12,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+        {ccForm.tbRiskPresent&&<label style={{fontSize:12,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:4}}>
           <input type="checkbox" checked={ccForm.tbTestPerformed} onChange={e=>setCcForm(p=>({...p,tbTestPerformed:e.target.checked}))}/>TB test performed
         </label>}
       </div>
@@ -7288,7 +7424,7 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
           <input style={inputS} value={kgForm.school} onChange={e=>setKgForm(p=>({...p,school:e.target.value}))} placeholder="School name"/>
         </div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginTop:8,marginBottom:8}}>Exam/Screening Dates</div>
+      <div style={{fontSize:12,fontWeight:600,color:"var(--text-secondary)",marginTop:8,marginBottom:8}}>Exam/Screening Dates</div>
       <div style={row}>
         <div style={{flex:1}}><span style={label}>Health History</span><input type="date" style={inputS} value={kgForm.healthHistory} onChange={e=>setKgForm(p=>({...p,healthHistory:e.target.value}))}/></div>
         <div style={{flex:1}}><span style={label}>Physical Exam</span><input type="date" style={inputS} value={kgForm.physicalExam} onChange={e=>setKgForm(p=>({...p,physicalExam:e.target.value}))}/></div>
@@ -7304,12 +7440,12 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
         <div style={{flex:1}}><span style={label}>Urine</span><input type="date" style={inputS} value={kgForm.urine} onChange={e=>setKgForm(p=>({...p,urine:e.target.value}))}/></div>
         <div style={{flex:1}}><span style={label}>Blood Lead</span><input type="date" style={inputS} value={kgForm.bloodLead} onChange={e=>setKgForm(p=>({...p,bloodLead:e.target.value}))}/></div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginTop:8,marginBottom:8}}>Results</div>
+      <div style={{fontSize:12,fontWeight:600,color:"var(--text-secondary)",marginTop:8,marginBottom:8}}>Results</div>
       <div style={{display:"flex",gap:16,marginBottom:8}}>
-        <label style={{fontSize:12,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+        <label style={{fontSize:12,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:4}}>
           <input type="radio" checked={kgForm.noConditionsOfConcern} onChange={()=>setKgForm(p=>({...p,noConditionsOfConcern:true,conditionsFound:""}))}/>No conditions of concern
         </label>
-        <label style={{fontSize:12,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+        <label style={{fontSize:12,color:"var(--text-secondary)",display:"flex",alignItems:"center",gap:4}}>
           <input type="radio" checked={!kgForm.noConditionsOfConcern} onChange={()=>setKgForm(p=>({...p,noConditionsOfConcern:false}))}/>Conditions found
         </label>
       </div>
@@ -7325,7 +7461,7 @@ function FormsLettersView({patient,keys,relay,onNavigate}:{patient:Patient;keys:
     {/* ── Growth Chart ── */}
     {activeForm==="growth"&&<div style={formCard}>
       <div style={{fontWeight:600,fontSize:14,marginBottom:8}}>📊 Growth Chart PDF</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>
+      <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:12}}>
         Go to the <strong style={{color:"#06b6d4",cursor:"pointer"}} onClick={()=>onNavigate("growth")}>Growth Chart tab</strong> and click Print.
         You can select which charts (Weight, Height, BMI, Head Circumference) to include in a single multi-page PDF.
       </div>
@@ -7358,6 +7494,19 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
   const [showDemographics,setShowDemographics]=useState(false);
   const [ordersAutoOpen,setOrdersAutoOpen]=useState<"lab"|"imaging"|"rx"|null>(null);
   const [ordersKey,setOrdersKey]=useState(0);
+  const tabsRef=useRef<HTMLDivElement>(null);
+  const [tabScroll,setTabScroll]=useState<{left:boolean;right:boolean}>({left:false,right:false});
+  const updateTabScroll=useCallback(()=>{
+    const el=tabsRef.current;if(!el)return;
+    setTabScroll({left:el.scrollLeft>2,right:el.scrollLeft<el.scrollWidth-el.clientWidth-2});
+  },[]);
+  useEffect(()=>{
+    const el=tabsRef.current;if(!el)return;
+    updateTabScroll();
+    el.addEventListener("scroll",updateTabScroll,{passive:true});
+    const ro=new ResizeObserver(updateTabScroll);ro.observe(el);
+    return()=>{el.removeEventListener("scroll",updateTabScroll);ro.disconnect();};
+  },[updateTabScroll]);
   const age=ageFromDob(patient.dob);
   const tabs:[ChartTab,string][]=[
     ["overview","Overview"],["timeline","Timeline"],["encounters","Encounters"],["problems","Problems"],
@@ -7369,34 +7518,44 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
   return(
     <div>
       {/* Patient header */}
-      <div style={{...S.card,background:"#162032",marginBottom:0,borderRadius:"10px 10px 0 0"}}>
+      <div style={{...S.card,background:"var(--bg-header)",marginBottom:0,borderRadius:"10px 10px 0 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <div style={{fontSize:18,fontWeight:700}}>{patient.name}</div>
-            <div style={{color:"#64748b",fontSize:12,marginTop:2}}>
+            <div style={{color:"var(--text-muted)",fontSize:12,marginTop:2}}>
               {patient.dob} · {age.display} · {patient.sex.charAt(0).toUpperCase()+patient.sex.slice(1)}
             </div>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <Badge t={`ID: ${patient.id.slice(0,8)}…`} col="#475569" bg="#0f172a"/>
+            <Badge t={`ID: ${patient.id.slice(0,8)}…`} col="var(--text-label)" bg="var(--bg-app)"/>
           </div>
         </div>
       </div>
 
       {/* Chart tabs */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#0f172a",borderBottom:"1px solid #1e293b",marginBottom:16}}>
-        <div style={{display:"flex",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none",flex:1,WebkitOverflowScrolling:"touch"} as React.CSSProperties}>
+      <div style={{display:"flex",alignItems:"center",background:"var(--bg-tab-bar)",borderBottom:"1px solid var(--border-subtle)",marginBottom:16,position:"relative"}}>
+        {tabScroll.left&&<button onClick={()=>{tabsRef.current?.scrollBy({left:-200,behavior:"smooth"})}} style={{
+          position:"absolute",left:0,top:0,bottom:0,width:32,zIndex:2,border:"none",cursor:"pointer",
+          background:"linear-gradient(to right,var(--bg-tab-bar) 70%,transparent)",color:"var(--text-primary)",fontSize:18,
+          display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0,
+        }}>‹</button>}
+        <div ref={tabsRef} style={{display:"flex",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none",flex:1,minWidth:0,WebkitOverflowScrolling:"touch"} as React.CSSProperties}>
           {tabs.map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)} style={{
               padding:"10px 16px",border:"none",cursor:"pointer",fontFamily:"inherit",
-              background:"transparent",borderBottom:tab===id?"2px solid #0ea5e9":"2px solid transparent",
-              color:tab===id?"#e0f2fe":"#64748b",fontSize:12,fontWeight:tab===id?600:400,
+              background:"transparent",borderBottom:tab===id?"2px solid var(--tab-active)":"2px solid transparent",
+              color:tab===id?"var(--tab-active)":"var(--text-muted)",fontSize:12,fontWeight:tab===id?600:400,
               whiteSpace:"nowrap",flexShrink:0,
             }}>{label}</button>
           ))}
         </div>
+        {tabScroll.right&&<button onClick={()=>{tabsRef.current?.scrollBy({left:200,behavior:"smooth"})}} style={{
+          position:"absolute",right:0,top:0,bottom:0,width:32,zIndex:2,border:"none",cursor:"pointer",
+          background:"linear-gradient(to left,var(--bg-tab-bar) 70%,transparent)",color:"var(--text-primary)",fontSize:18,
+          display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0,
+        }}>›</button>}
         {(canDo("sign")||canDo("order")||canDo("prescribe")||canDo("write"))&&(
-        <div style={{position:"relative",marginRight:16}}>
+        <div style={{position:"relative",marginLeft:12,marginRight:16,flexShrink:0}}>
           <button onClick={()=>setShowActions(!showActions)} style={{
             width:28,height:28,borderRadius:"50%",border:"1px solid #0ea5e9",
             background:"linear-gradient(135deg,#0ea5e9,#06b6d4)",color:"#fff",
@@ -7404,38 +7563,38 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
             alignItems:"center",justifyContent:"center"
           }}>+</button>
           {showActions&&(
-            <div style={{position:"absolute",top:34,right:0,background:"#1e293b",
-              border:"1px solid #334155",borderRadius:8,minWidth:180,zIndex:100,
-              boxShadow:"0 4px 12px rgba(0,0,0,0.3)"}}>
+            <div style={{position:"absolute",top:34,right:0,background:"var(--bg-card)",
+              border:"1px solid var(--border)",borderRadius:8,minWidth:180,zIndex:100,
+              boxShadow:"0 4px 12px var(--shadow)"}}>
               {canDo("sign")&&<button onClick={()=>{setShowNewEncounter(true);setShowNurseNote(false);setShowActions(false);setEncounterKey(k=>k+1);}} style={{
                 width:"100%",padding:"10px 14px",border:"none",background:"transparent",
-                color:"#e2e8f0",fontSize:13,textAlign:"left",cursor:"pointer",
+                color:"var(--text-primary)",fontSize:13,textAlign:"left",cursor:"pointer",
                 fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,
-                borderBottom:"1px solid #334155"
+                borderBottom:"1px solid var(--border)"
               }}>📝 New Encounter</button>}
               {canDo("write")&&!canDo("sign")&&<button onClick={()=>{setShowNurseNote(true);setShowNewEncounter(false);setShowActions(false);setEncounterKey(k=>k+1);}} style={{
                 width:"100%",padding:"10px 14px",border:"none",background:"transparent",
-                color:"#e2e8f0",fontSize:13,textAlign:"left",cursor:"pointer",
+                color:"var(--text-primary)",fontSize:13,textAlign:"left",cursor:"pointer",
                 fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,
-                borderBottom:"1px solid #334155"
+                borderBottom:"1px solid var(--border)"
               }}>📋 Note</button>}
               {canDo("order")&&<button onClick={()=>{setTab("orders");setOrdersAutoOpen("lab");setOrdersKey(k=>k+1);setShowActions(false);}} style={{
                 width:"100%",padding:"10px 14px",border:"none",background:"transparent",
-                color:"#e2e8f0",fontSize:13,textAlign:"left",cursor:"pointer",
+                color:"var(--text-primary)",fontSize:13,textAlign:"left",cursor:"pointer",
                 fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,
-                borderTop:"1px solid #334155"
+                borderTop:"1px solid var(--border)"
               }}>🧪 New Lab Order</button>}
               {canDo("order")&&<button onClick={()=>{setTab("orders");setOrdersAutoOpen("imaging");setOrdersKey(k=>k+1);setShowActions(false);}}style={{
                 width:"100%",padding:"10px 14px",border:"none",background:"transparent",
-                color:"#e2e8f0",fontSize:13,textAlign:"left",cursor:"pointer",
+                color:"var(--text-primary)",fontSize:13,textAlign:"left",cursor:"pointer",
                 fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,
-                borderTop:"1px solid #334155"
+                borderTop:"1px solid var(--border)"
               }}>🩻 New Imaging Order</button>}
               {canDo("prescribe")&&<button onClick={()=>{setTab("orders");setOrdersAutoOpen("rx");setOrdersKey(k=>k+1);setShowActions(false);}}style={{
                 width:"100%",padding:"10px 14px",border:"none",background:"transparent",
-                color:"#e2e8f0",fontSize:13,textAlign:"left",cursor:"pointer",
+                color:"var(--text-primary)",fontSize:13,textAlign:"left",cursor:"pointer",
                 fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,
-                borderTop:"1px solid #334155"
+                borderTop:"1px solid var(--border)"
               }}>💊 New Prescription</button>}
             </div>
           )}
@@ -7491,28 +7650,28 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
           {/* Collapse/Expand Tab */}
           <div onClick={()=>setPanelCollapsed(!panelCollapsed)} style={{
             position:"fixed",top:"50%",right:panelCollapsed?0:450,transform:"translateY(-50%)",
-            width:32,height:80,background:"#1e293b",border:"1px solid #334155",
-            borderRight:panelCollapsed?"1px solid #334155":"none",
+            width:32,height:80,background:"var(--bg-card)",border:"1px solid var(--border)",
+            borderRight:panelCollapsed?"1px solid var(--border)":"none",
             borderRadius:panelCollapsed?"8px 0 0 8px":"0 0 0 8px",
             display:"flex",alignItems:"center",justifyContent:"center",
             cursor:"pointer",zIndex:201,transition:"right 0.2s ease",
             boxShadow:"-2px 0 8px rgba(0,0,0,0.2)"
           }}>
-            <span style={{fontSize:16,color:"#94a3b8"}}>{panelCollapsed?"◀":"▶"}</span>
+            <span style={{fontSize:16,color:"var(--text-secondary)"}}>{panelCollapsed?"◀":"▶"}</span>
           </div>
 
           {/* Side Panel */}
           <div style={{position:"fixed",top:0,right:panelCollapsed?-450:0,width:450,height:"100vh",
-            background:"#0f172a",borderLeft:"1px solid #1e293b",zIndex:200,
-            overflowY:"auto",boxShadow:"-4px 0 12px rgba(0,0,0,0.3)",
+            background:"var(--bg-app)",borderLeft:"1px solid var(--border-subtle)",zIndex:200,
+            overflowY:"auto",boxShadow:"-4px 0 12px var(--shadow)",
             transition:"right 0.2s ease"}}>
-            <div style={{position:"sticky",top:0,background:"#1e293b",padding:"12px 16px",
-              borderBottom:"1px solid #334155",display:"flex",justifyContent:"space-between",
+            <div style={{position:"sticky",top:0,background:"var(--bg-card)",padding:"12px 16px",
+              borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",
               alignItems:"center",zIndex:10}}>
               <div style={{fontWeight:600,fontSize:14}}>📝 New Encounter — {patient.name}</div>
               <button onClick={()=>setShowNewEncounter(false)} style={{
-                width:28,height:28,borderRadius:"50%",border:"1px solid #475569",
-                background:"transparent",color:"#94a3b8",fontSize:18,cursor:"pointer",
+                width:28,height:28,borderRadius:"50%",border:"1px solid var(--text-label)",
+                background:"transparent",color:"var(--text-secondary)",fontSize:18,cursor:"pointer",
                 display:"flex",alignItems:"center",justifyContent:"center"
               }}>×</button>
             </div>
@@ -7529,26 +7688,26 @@ function PatientChart({patient,keys,relay,onPatientUpdated,initialTab,initialThr
         <>
           <div onClick={()=>setPanelCollapsed(!panelCollapsed)} style={{
             position:"fixed",top:"50%",right:panelCollapsed?0:400,transform:"translateY(-50%)",
-            width:32,height:80,background:"#1e293b",border:"1px solid #334155",
-            borderRight:panelCollapsed?"1px solid #334155":"none",
+            width:32,height:80,background:"var(--bg-card)",border:"1px solid var(--border)",
+            borderRight:panelCollapsed?"1px solid var(--border)":"none",
             borderRadius:panelCollapsed?"8px 0 0 8px":"0 0 0 8px",
             display:"flex",alignItems:"center",justifyContent:"center",
             cursor:"pointer",zIndex:201,transition:"right 0.2s ease",
             boxShadow:"-2px 0 8px rgba(0,0,0,0.2)"
           }}>
-            <span style={{fontSize:16,color:"#94a3b8"}}>{panelCollapsed?"◀":"▶"}</span>
+            <span style={{fontSize:16,color:"var(--text-secondary)"}}>{panelCollapsed?"◀":"▶"}</span>
           </div>
           <div style={{position:"fixed",top:0,right:panelCollapsed?-400:0,width:400,height:"100vh",
-            background:"#0f172a",borderLeft:"1px solid #1e293b",zIndex:200,
-            overflowY:"auto",boxShadow:"-4px 0 12px rgba(0,0,0,0.3)",
+            background:"var(--bg-app)",borderLeft:"1px solid var(--border-subtle)",zIndex:200,
+            overflowY:"auto",boxShadow:"-4px 0 12px var(--shadow)",
             transition:"right 0.2s ease"}}>
-            <div style={{position:"sticky",top:0,background:"#1e293b",padding:"12px 16px",
-              borderBottom:"1px solid #334155",display:"flex",justifyContent:"space-between",
+            <div style={{position:"sticky",top:0,background:"var(--bg-card)",padding:"12px 16px",
+              borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",
               alignItems:"center",zIndex:10}}>
               <div style={{fontWeight:600,fontSize:14}}>📋 Note — {patient.name}</div>
               <button onClick={()=>setShowNurseNote(false)} style={{
-                width:28,height:28,borderRadius:"50%",border:"1px solid #475569",
-                background:"transparent",color:"#94a3b8",fontSize:18,cursor:"pointer",
+                width:28,height:28,borderRadius:"50%",border:"1px solid var(--text-label)",
+                background:"transparent",color:"var(--text-secondary)",fontSize:18,cursor:"pointer",
                 display:"flex",alignItems:"center",justifyContent:"center"
               }}>×</button>
             </div>
@@ -7587,26 +7746,26 @@ function PortalConnectionGenerator({pkHex}:{pkHex:string}){
   if(!pkHex) return null;
 
   return(
-    <div style={{...S.card,marginTop:16,background:"#0f1d14",border:"1px solid #166534"}}>
-      <div style={{fontWeight:600,fontSize:13,marginBottom:4,color:"#86efac"}}>
+    <div style={{...S.card,marginTop:16}}>
+      <div style={{fontWeight:600,fontSize:13,marginBottom:4}}>
         🔗 Patient Portal Connection String
       </div>
-      <div style={{fontSize:11,color:"#6ee7b7",marginBottom:12,lineHeight:1.6}}>
+      <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:12,lineHeight:1.6}}>
         Patients paste this into the portal to connect to your practice.
         Safe to share — contains only public info (relay URL, public key, API endpoints).
       </div>
 
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
-        <Btn small solid={!showUri} col="#22c55e" onClick={()=>setShowUri(false)}>JSON</Btn>
-        <Btn small solid={showUri} col="#22c55e" onClick={()=>setShowUri(true)}>URI</Btn>
+        <Btn small solid={!showUri} col="#0ea5e9" onClick={()=>setShowUri(false)}>JSON</Btn>
+        <Btn small solid={showUri} col="#0ea5e9" onClick={()=>setShowUri(true)}>URI</Btn>
       </div>
 
-      <div style={{...S.mono,fontSize:9,padding:10,background:"#0a1628",marginBottom:10,maxHeight:160,overflowY:"auto" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
+      <div style={{...S.mono,fontSize:9,padding:10,background:"var(--bg-deep)",marginBottom:10,maxHeight:160,overflowY:"auto" as const,whiteSpace:"pre-wrap" as const,wordBreak:"break-all" as const}}>
         {showUri ? connUri : connJson}
       </div>
 
       <div style={{display:"flex",gap:8}}>
-        <Btn small col="#22c55e" onClick={()=>copy("conn",showUri ? connUri : connJson)}>
+        <Btn small col="#0ea5e9" onClick={()=>copy("conn",showUri ? connUri : connJson)}>
           {copied==="conn"?"✓ Copied":"📋 Copy"}
         </Btn>
       </div>
@@ -7715,14 +7874,14 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
   const age=ageFromDob(patient.dob);
 
   // ── Tile primitives ──────────────────────────────────────────────────────────
-  const TILE_BG="#0d1421";
-  const TILE_BORDER="#1e293b";
+  const TILE_BG="var(--bg-card)";
+  const TILE_BORDER="var(--border-subtle)";
 
   const Tile=({col,children}:{col:string;children:React.ReactNode})=>(
     <div style={{
       background:TILE_BG,border:`1px solid ${TILE_BORDER}`,borderRadius:8,
       display:"flex",flexDirection:"column",overflow:"hidden",
-      boxShadow:"0 2px 8px rgba(0,0,0,0.3)",
+      boxShadow:"0 2px 8px var(--shadow)",
     }}>{children}</div>
   );
 
@@ -7742,8 +7901,8 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
     >
       <div style={{display:"flex",alignItems:"center",gap:7}}>
         <span style={{fontSize:13}}>{icon}</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",letterSpacing:"0.01em"}}>{label}</span>
-        {meta&&<span style={{fontSize:10,color:"#475569",fontWeight:400}}>{meta}</span>}
+        <span style={{fontSize:12,fontWeight:700,color:"var(--text-primary)",letterSpacing:"0.01em"}}>{label}</span>
+        {meta&&<span style={{fontSize:10,color:"var(--text-label)",fontWeight:400}}>{meta}</span>}
       </div>
       {action&&<div onClick={e=>e.stopPropagation()}>{action}</div>}
     </div>
@@ -7755,40 +7914,40 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
     </div>
   );
 
-  const Empty=()=><div style={{color:"#2d3f55",fontSize:11,fontStyle:"italic",padding:"4px 0"}}>None on file</div>;
+  const Empty=()=><div style={{color:"var(--text-faint)",fontSize:11,fontStyle:"italic",padding:"4px 0"}}>None on file</div>;
 
   const DRow=({label,val}:{label:string;val?:string})=>val?(
     <div style={{display:"flex",gap:0,fontSize:11,marginBottom:4,lineHeight:1.4}}>
-      <span style={{color:"#475569",width:72,flexShrink:0}}>{label}</span>
-      <span style={{color:"#cbd5e1"}}>{val}</span>
+      <span style={{color:"var(--text-label)",width:72,flexShrink:0}}>{label}</span>
+      <span style={{color:"var(--text-primary)"}}>{val}</span>
     </div>
   ):null;
 
   const ProblemRow=({text,chronic}:{text:string;chronic:boolean})=>(
     <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:4,fontSize:11}}>
-      <span style={{width:6,height:6,borderRadius:"50%",background:chronic?"#a78bfa":"#64748b",flexShrink:0,marginTop:3,display:"inline-block"}}/>
-      <span style={{color:"#cbd5e1",lineHeight:1.4}}>{text}</span>
+      <span style={{width:6,height:6,borderRadius:"50%",background:chronic?"#a78bfa":"var(--text-muted)",flexShrink:0,marginTop:3,display:"inline-block"}}/>
+      <span style={{color:"var(--text-primary)",lineHeight:1.4}}>{text}</span>
     </div>
   );
 
   const MedRow=({name,dose}:{name:string;dose?:string})=>(
     <div style={{marginBottom:5,fontSize:11,lineHeight:1.4}}>
-      <span style={{color:"#6ee7b7",fontWeight:600}}>{name}</span>
-      {dose&&<span style={{color:"#475569"}}> {dose}</span>}
+      <span style={{color:"var(--accent-green)",fontWeight:600}}>{name}</span>
+      {dose&&<span style={{color:"var(--text-label)"}}> {dose}</span>}
     </div>
   );
 
   const AllergyRow=({name,reaction}:{name:string;reaction?:string})=>(
     <div style={{marginBottom:5,fontSize:11,lineHeight:1.4,display:"flex",gap:6,alignItems:"baseline"}}>
       <span style={{color:"#fca5a5",fontWeight:600}}>{name}</span>
-      {reaction&&<span style={{color:"#64748b",fontSize:10}}>— {reaction}</span>}
+      {reaction&&<span style={{color:"var(--text-muted)",fontSize:10}}>— {reaction}</span>}
     </div>
   );
 
   const ImmRow=({name,date}:{name:string;date:string})=>(
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4,fontSize:11,gap:8}}>
-      <span style={{color:"#cbd5e1",lineHeight:1.4}}>{name}</span>
-      <span style={{color:"#475569",fontSize:10,flexShrink:0,whiteSpace:"nowrap" as const}}>{date}</span>
+      <span style={{color:"var(--text-primary)",lineHeight:1.4}}>{name}</span>
+      <span style={{color:"var(--text-label)",fontSize:10,flexShrink:0,whiteSpace:"nowrap" as const}}>{date}</span>
     </div>
   );
 
@@ -7798,9 +7957,9 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
       {/* ── Demographics ── */}
       <Tile col="#0ea5e9">
         <TileHeader col="#0ea5e9" icon="👤" label="Demographics" tab="overview"
-          action={canDo("write")?<span onClick={()=>onNavigate("demographics")} style={{fontSize:10,color:"#475569",cursor:"pointer"}}
+          action={canDo("write")?<span onClick={()=>onNavigate("demographics")} style={{fontSize:10,color:"var(--text-label)",cursor:"pointer"}}
             onMouseEnter={e=>(e.currentTarget.style.color="#0ea5e9")}
-            onMouseLeave={e=>(e.currentTarget.style.color="#475569")}>Edit</span>:undefined}
+            onMouseLeave={e=>(e.currentTarget.style.color="var(--text-label)")}>Edit</span>:undefined}
         />
         <TileBody>
           <DRow label="DOB" val={patient.dob}/>
@@ -7864,16 +8023,16 @@ function OverviewTiles({patient,keys,relay,onNavigate}:{
             <div style={{display:"flex",gap:40,paddingTop:6}}>
               {latestWeight&&(
                 <div>
-                  <div style={{fontSize:11,color:"#475569",marginBottom:2,textTransform:"uppercase" as const,letterSpacing:"0.5px"}}>Weight</div>
+                  <div style={{fontSize:11,color:"var(--text-label)",marginBottom:2,textTransform:"uppercase" as const,letterSpacing:"0.5px"}}>Weight</div>
                   <div style={{fontSize:26,fontWeight:700,color:"#7dd3fc",lineHeight:1}}>{latestWeight.value}</div>
-                  <div style={{fontSize:10,color:"#475569",marginTop:4}}>{latestWeight.date}</div>
+                  <div style={{fontSize:10,color:"var(--text-label)",marginTop:4}}>{latestWeight.date}</div>
                 </div>
               )}
               {latestHeight&&(
                 <div>
-                  <div style={{fontSize:11,color:"#475569",marginBottom:2,textTransform:"uppercase" as const,letterSpacing:"0.5px"}}>Height</div>
+                  <div style={{fontSize:11,color:"var(--text-label)",marginBottom:2,textTransform:"uppercase" as const,letterSpacing:"0.5px"}}>Height</div>
                   <div style={{fontSize:26,fontWeight:700,color:"#7dd3fc",lineHeight:1}}>{latestHeight.value}</div>
-                  <div style={{fontSize:10,color:"#475569",marginTop:4}}>{latestHeight.date}</div>
+                  <div style={{fontSize:10,color:"var(--text-label)",marginTop:4}}>{latestHeight.date}</div>
                 </div>
               )}
             </div>
@@ -8098,7 +8257,7 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div>
           <div style={{fontWeight:600,fontSize:13}}>👥 Staff Management</div>
-          <div style={{fontSize:10,color:"#64748b",marginTop:2}}>Authorize staff access with per-user keypairs</div>
+          <div style={{fontSize:10,color:"var(--text-muted)",marginTop:2}}>Authorize staff access with per-user keypairs</div>
         </div>
         <div style={{display:"flex",gap:6}}>
           <Btn small col="#64748b" onClick={()=>{setShowKeygen(!showKeygen);if(!showKeygen)setShowAdd(false);}}>
@@ -8112,9 +8271,9 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
 
       {/* Key Generator */}
       {showKeygen&&(
-        <div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:14,marginBottom:14}}>
-          <div style={{fontWeight:600,fontSize:12,marginBottom:8,color:"#e2e8f0"}}>🔑 Generate Staff Keypair</div>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:12,lineHeight:1.6}}>
+        <div style={{background:"var(--bg-app)",border:"1px solid var(--border)",borderRadius:8,padding:14,marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:12,marginBottom:8,color:"var(--text-primary)"}}>🔑 Generate Staff Keypair</div>
+          <div style={{fontSize:11,color:"var(--text-muted)",marginBottom:12,lineHeight:1.6}}>
             Generate a Nostr keypair for a new staff member. Give them the nsec (secret key) securely — 
             it will only be shown once. Keep the npub (public key) to add them to the roster.
           </div>
@@ -8125,7 +8284,7 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
               <div style={{marginBottom:10}}>
                 <label style={{...S.lbl,color:"#fbbf24"}}>Secret Key (nsec) — give to staff member securely</label>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  <div style={{...S.mono,flex:1,fontSize:9,padding:8,background:"#1e293b",wordBreak:"break-all" as const}}>
+                  <div style={{...S.mono,flex:1,fontSize:9,padding:8,background:"var(--bg-card)",wordBreak:"break-all" as const}}>
                     {genKey.nsec}
                   </div>
                   <Btn small col="#fbbf24" onClick={()=>copyVal("nsec",genKey.nsec)}>
@@ -8136,7 +8295,7 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
               <div style={{marginBottom:10}}>
                 <label style={S.lbl}>Public Key (npub) — enter this in the "Add Staff" form</label>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  <div style={{...S.mono,flex:1,fontSize:9,padding:8,background:"#1e293b",wordBreak:"break-all" as const}}>
+                  <div style={{...S.mono,flex:1,fontSize:9,padding:8,background:"var(--bg-card)",wordBreak:"break-all" as const}}>
                     {genKey.npub}
                   </div>
                   <Btn small col="#0ea5e9" onClick={()=>copyVal("npub",genKey.npub)}>
@@ -8160,27 +8319,27 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
 
       {/* Add Staff Form */}
       {showAdd&&(
-        <div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:14,marginBottom:14}}>
-          <div style={{fontWeight:600,fontSize:12,marginBottom:10,color:"#e2e8f0"}}>Add Staff Member</div>
+        <div style={{background:"var(--bg-app)",border:"1px solid var(--border)",borderRadius:8,padding:14,marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:12,marginBottom:10,color:"var(--text-primary)"}}>Add Staff Member</div>
           <div style={{marginBottom:10}}>
             <label style={S.lbl}>Name</label>
             <input value={newName} onChange={e=>{setNewName(e.target.value);setError("");}}
               placeholder="e.g. Jane Doe" spellCheck={false}
-              style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:6,
-                padding:"8px 12px",color:"#e2e8f0",fontSize:12,boxSizing:"border-box" as const,outline:"none"}}
+              style={{width:"100%",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:6,
+                padding:"8px 12px",color:"var(--text-primary)",fontSize:12,boxSizing:"border-box" as const,outline:"none"}}
               onFocus={e=>e.currentTarget.style.borderColor="#0ea5e9"}
-              onBlur={e=>e.currentTarget.style.borderColor="#334155"}
+              onBlur={e=>e.currentTarget.style.borderColor="var(--border)"}
             />
           </div>
           <div style={{marginBottom:10}}>
             <label style={S.lbl}>Key (npub, nsec, or hex)</label>
             <input value={newNpub} onChange={e=>{setNewNpub(e.target.value);setError("");}}
               placeholder="npub1… / nsec1… / 64-char hex" spellCheck={false} autoComplete="off"
-              style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:6,
-                padding:"8px 12px",color:"#e2e8f0",fontSize:11,fontFamily:"monospace",
+              style={{width:"100%",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:6,
+                padding:"8px 12px",color:"var(--text-primary)",fontSize:11,fontFamily:"monospace",
                 boxSizing:"border-box" as const,outline:"none"}}
               onFocus={e=>e.currentTarget.style.borderColor="#0ea5e9"}
-              onBlur={e=>e.currentTarget.style.borderColor="#334155"}
+              onBlur={e=>e.currentTarget.style.borderColor="var(--border)"}
             />
           </div>
           <div style={{marginBottom:12}}>
@@ -8190,22 +8349,22 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
                 <button key={r} onClick={()=>setNewRole(r)}
                   style={{
                     padding:"6px 14px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",
-                    border:`1px solid ${newRole===r?roleColors[r]:"#334155"}`,
+                    border:`1px solid ${newRole===r?roleColors[r]:"var(--border)"}`,
                     background:newRole===r?roleColors[r]+"20":"transparent",
-                    color:newRole===r?roleColors[r]:"#94a3b8",
+                    color:newRole===r?roleColors[r]:"var(--text-secondary)",
                     fontFamily:"inherit",
                   }}>
                   {roleLabels[r]}
                 </button>
               ))}
             </div>
-            <div style={{fontSize:10,color:"#64748b",marginTop:6}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",marginTop:6}}>
               Permissions: {ROLE_PERMISSIONS[newRole].join(", ")}
             </div>
           </div>
           {error&&(
             <div style={{color:"#fca5a5",fontSize:11,marginBottom:10,padding:"6px 10px",
-              background:"#450a0a",borderRadius:6,border:"1px solid #991b1b"}}>{error}</div>
+              background:"var(--tint-red)",borderRadius:6,border:"1px solid var(--tint-red-border)"}}>{error}</div>
           )}
           <Btn solid col="#22c55e" onClick={handleAddStaff} disabled={publishing||!newName.trim()||!newNpub.trim()}>
             {publishing?"Publishing…":"Authorize Staff Member"}
@@ -8215,28 +8374,28 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
 
       {/* Active Staff */}
       {loading?(
-        <div style={{fontSize:11,color:"#64748b",padding:8}}>Loading roster…</div>
+        <div style={{fontSize:11,color:"var(--text-muted)",padding:8}}>Loading roster…</div>
       ):activeStaff.length===0?(
-        <div style={{fontSize:11,color:"#475569",padding:"12px 0",textAlign:"center"}}>
+        <div style={{fontSize:11,color:"var(--text-label)",padding:"12px 0",textAlign:"center"}}>
           No staff members authorized yet. Click "+ Add Staff" to get started.
         </div>
       ):(
         <div>
           {activeStaff.map(s=>(
             <div key={s.pkHex} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",
-              borderBottom:"1px solid #1e293b"}}>
+              borderBottom:"1px solid var(--border-subtle)"}}>
               <div style={{
                 width:8,height:8,borderRadius:4,background:roleColors[s.role],flexShrink:0
               }}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:"#e2e8f0"}}>{s.name}</div>
+                <div style={{fontSize:12,fontWeight:600,color:"var(--text-primary)"}}>{s.name}</div>
                 <div style={{fontSize:10,color:roleColors[s.role],fontWeight:600}}>{roleLabels[s.role]}</div>
-                <div style={{fontSize:9,color:"#475569",fontFamily:"monospace",
+                <div style={{fontSize:9,color:"var(--text-label)",fontFamily:"monospace",
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
                   {npubEncode(fromHex(s.pkHex))}
                 </div>
               </div>
-              <div style={{fontSize:9,color:"#475569",flexShrink:0}}>
+              <div style={{fontSize:9,color:"var(--text-label)",flexShrink:0}}>
                 {new Date(s.addedAt*1000).toLocaleDateString()}
               </div>
               {revokeConfirm===s.pkHex?(
@@ -8265,16 +8424,16 @@ function StaffManagement({keys,relay}:{keys:Keypair;relay:ReturnType<typeof useR
       {/* Revoked Staff (collapsed) */}
       {revokedStaff.length>0&&(
         <details style={{marginTop:10}}>
-          <summary style={{fontSize:10,color:"#475569",cursor:"pointer",userSelect:"none" as const}}>
+          <summary style={{fontSize:10,color:"var(--text-label)",cursor:"pointer",userSelect:"none" as const}}>
             {revokedStaff.length} revoked staff member{revokedStaff.length>1?"s":""}
           </summary>
           {revokedStaff.map(s=>(
             <div key={s.pkHex} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",
-              opacity:0.5,borderBottom:"1px solid #1e293b"}}>
-              <div style={{width:8,height:8,borderRadius:4,background:"#475569",flexShrink:0}}/>
+              opacity:0.5,borderBottom:"1px solid var(--border-subtle)"}}>
+              <div style={{width:8,height:8,borderRadius:4,background:"var(--text-label)",flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:11,color:"#64748b",textDecoration:"line-through"}}>{s.name}</div>
-                <div style={{fontSize:9,color:"#475569"}}>{roleLabels[s.role]} — revoked {new Date((s.revokedAt||0)*1000).toLocaleDateString()}</div>
+                <div style={{fontSize:11,color:"var(--text-muted)",textDecoration:"line-through"}}>{s.name}</div>
+                <div style={{fontSize:9,color:"var(--text-label)"}}>{roleLabels[s.role]} — revoked {new Date((s.revokedAt||0)*1000).toLocaleDateString()}</div>
               </div>
             </div>
           ))}
@@ -8516,12 +8675,12 @@ function ServiceAgentsManager({ keys, relay }: {
   return (
     <div style={{ ...S.card, marginBottom: 16 }}>
       <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>🤖 Service Agents</div>
-      <div style={{ fontSize: 10, color: "#64748b", marginBottom: 12 }}>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 12 }}>
         Dedicated keypairs for server-side services. Practice nsec stays in cold storage.
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 11, color: "#64748b", padding: 8 }}>Loading agents...</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", padding: 8 }}>Loading agents...</div>
       ) : (
         <>
           {agents.length > 0 && (
@@ -8529,17 +8688,17 @@ function ServiceAgentsManager({ keys, relay }: {
               {agents.map(a => (
                 <div key={a.service} style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
-                  borderBottom: "1px solid #1e293b"
+                  borderBottom: "1px solid var(--border-subtle)"
                 }}>
                   <div style={{ fontSize: 20 }}>{serviceIcons[a.service] || "🔧"}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>
                       {serviceLabels[a.service] || a.service}
                     </div>
-                    <div style={{ fontSize: 9, color: "#475569", fontFamily: "monospace" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-label)", fontFamily: "monospace" }}>
                       {a.pkHex.slice(0, 16)}...{a.pkHex.slice(-8)}
                     </div>
-                    <div style={{ fontSize: 9, color: "#64748b" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-muted)" }}>
                       Authorized {new Date(a.grantedAt * 1000).toLocaleDateString()}
                     </div>
                   </div>
@@ -8552,7 +8711,7 @@ function ServiceAgentsManager({ keys, relay }: {
                   )}
                   <div style={{
                     fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
-                    background: "#0f2a1f", color: "#10b981"
+                    background: "var(--tint-green)", color: "#10b981"
                   }}>Active</div>
                 </div>
               ))}
@@ -8572,7 +8731,7 @@ function ServiceAgentsManager({ keys, relay }: {
                 </Btn>
               )}
               {agents.length === 2 && (
-                <div style={{ fontSize: 10, color: "#475569", alignSelf: "center" }}>
+                <div style={{ fontSize: 10, color: "var(--text-label)", alignSelf: "center" }}>
                   Both agents configured.
                 </div>
               )}
@@ -8581,15 +8740,15 @@ function ServiceAgentsManager({ keys, relay }: {
 
           {generatedAgent && (
             <div style={{
-              background: "#0f172a", border: "1px solid #334155", borderRadius: 8,
+              background: "var(--bg-app)", border: "1px solid var(--border)", borderRadius: 8,
               padding: 16, marginTop: 12
             }}>
-              <div style={{ fontWeight: 600, fontSize: 12, color: "#e2e8f0", marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "var(--text-primary)", marginBottom: 8 }}>
                 {serviceIcons[generatedAgent.service]} {generatedAgent.name} — New Keypair
               </div>
 
               <div style={{
-                background: "#1c0a0a", border: "1px solid #7f1d1d", borderRadius: 6,
+                background: "var(--tint-red)", border: "1px solid var(--tint-red-border)", borderRadius: 6,
                 padding: 10, marginBottom: 12, fontSize: 10, color: "#fca5a5"
               }}>
                 ⚠️ Save the nsec below to the server's <code>.env</code> file.
@@ -8597,13 +8756,13 @@ function ServiceAgentsManager({ keys, relay }: {
               </div>
 
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 2 }}>
                   nsec (save to server .env as {generatedAgent.service === "billing"
                     ? "BILLING_AGENT_NSEC" : "FHIR_AGENT_NSEC"})
                 </div>
                 <div style={{
                   display: "flex", alignItems: "center", gap: 6,
-                  background: "#1e293b", borderRadius: 6, padding: "6px 10px"
+                  background: "var(--bg-card)", borderRadius: 6, padding: "6px 10px"
                 }}>
                   <code style={{
                     fontSize: 10, color: "#fbbf24", fontFamily: "monospace",
@@ -8619,15 +8778,15 @@ function ServiceAgentsManager({ keys, relay }: {
               </div>
 
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 2 }}>
                   Public key (hex) — add to relay whitelist
                 </div>
                 <div style={{
                   display: "flex", alignItems: "center", gap: 6,
-                  background: "#1e293b", borderRadius: 6, padding: "6px 10px"
+                  background: "var(--bg-card)", borderRadius: 6, padding: "6px 10px"
                 }}>
                   <code style={{
-                    fontSize: 10, color: "#94a3b8", fontFamily: "monospace",
+                    fontSize: 10, color: "var(--text-secondary)", fontFamily: "monospace",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, flex: 1
                   }}>
                     {generatedAgent.pkHex}
@@ -8639,7 +8798,7 @@ function ServiceAgentsManager({ keys, relay }: {
                 </div>
               </div>
 
-              <div style={{ fontSize: 10, color: "#64748b", marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 12 }}>
                 {serviceDescriptions[generatedAgent.service]}
               </div>
 
@@ -8663,9 +8822,9 @@ function ServiceAgentsManager({ keys, relay }: {
               {status && (
                 <div style={{
                   fontSize: 10, marginTop: 8, padding: "6px 10px", borderRadius: 6,
-                  background: status.startsWith("✗") ? "#1c0a0a" : "#0f2a1f",
-                  color: status.startsWith("✗") ? "#f87171" : "#4ade80",
-                  border: `1px solid ${status.startsWith("✗") ? "#7f1d1d" : "#166534"}`
+                  background: status.startsWith("✗") ? "var(--tint-red)" : "var(--tint-green)",
+                  color: status.startsWith("✗") ? "#f87171" : "var(--accent-green)",
+                  border: `1px solid ${status.startsWith("✗") ? "var(--tint-red-border)" : "var(--tint-green-border)"}`
                 }}>
                   {status}
                 </div>
@@ -8788,13 +8947,13 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
   const SecurityGate=({children}:{children:React.ReactNode})=>{
     if(securityUnlocked) return <>{children}</>;
     return(
-      <div style={{...S.card,background:"#0f172a",border:"1px solid #334155",marginBottom:16,position:"relative",overflow:"hidden"}}>
+      <div style={{...S.card,background:"var(--bg-app)",border:"1px solid var(--border)",marginBottom:16,position:"relative",overflow:"hidden"}}>
         <div style={{textAlign:"center",padding:"32px 24px"}}>
           <div style={{fontSize:32,marginBottom:12}}>🔒</div>
-          <div style={{fontWeight:700,fontSize:14,color:"#e2e8f0",marginBottom:4}}>
+          <div style={{fontWeight:700,fontSize:14,color:"var(--text-primary)",marginBottom:4}}>
             Security Sections Locked
           </div>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:20,maxWidth:320,margin:"0 auto 20px"}}>
+          <div style={{fontSize:11,color:"var(--text-muted)",marginBottom:20,maxWidth:320,margin:"0 auto 20px"}}>
             Re-authenticate to access practice keys, backup, YubiKey management, and device settings.
             Auto-locks after 5 minutes.
           </div>
@@ -8806,13 +8965,13 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
                 onClick={handleUnlockYubiKey}
                 disabled={unlockLoading}
                 style={{
-                  padding:"14px 28px",background:"#0f172a",
-                  border:"2px solid #334155",borderRadius:12,cursor:unlockLoading?"default":"pointer",
+                  padding:"14px 28px",background:"var(--bg-app)",
+                  border:"2px solid var(--border)",borderRadius:12,cursor:unlockLoading?"default":"pointer",
                   transition:"all 0.2s",display:"inline-flex",alignItems:"center",gap:8,
-                  color:"#e2e8f0",fontSize:13,fontWeight:600,fontFamily:"inherit",
+                  color:"var(--text-primary)",fontSize:13,fontWeight:600,fontFamily:"inherit",
                 }}
                 onMouseEnter={e=>{if(!unlockLoading)e.currentTarget.style.borderColor="#0ea5e9";}}
-                onMouseLeave={e=>{if(!unlockLoading)e.currentTarget.style.borderColor="#334155";}}
+                onMouseLeave={e=>{if(!unlockLoading)e.currentTarget.style.borderColor="var(--border)";}}
               >
                 <span style={{fontSize:18,animation:unlockLoading?"pulse 1.5s ease-in-out infinite":"none"}}>🔑</span>
                 {unlockLoading?"Tap YubiKey…":"Unlock with YubiKey"}
@@ -8822,10 +8981,10 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
 
           {/* Divider */}
           {hasYubiKeys&&(
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,color:"#475569",fontSize:11,maxWidth:280,margin:"0 auto 16px"}}>
-              <div style={{flex:1,height:1,background:"#334155"}}/>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,color:"var(--text-label)",fontSize:11,maxWidth:280,margin:"0 auto 16px"}}>
+              <div style={{flex:1,height:1,background:"var(--border)"}}/>
               <span>or enter key manually</span>
-              <div style={{flex:1,height:1,background:"#334155"}}/>
+              <div style={{flex:1,height:1,background:"var(--border)"}}/>
             </div>
           )}
 
@@ -8841,21 +9000,21 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
                 autoComplete="off"
                 spellCheck={false}
                 style={{
-                  width:"100%",background:"#1e293b",
-                  border:`1px solid ${unlockError?"#ef4444":"#334155"}`,
+                  width:"100%",background:"var(--bg-card)",
+                  border:`1px solid ${unlockError?"#ef4444":"var(--border)"}`,
                   borderRadius:8,padding:"10px 38px 10px 12px",
-                  color:"#e2e8f0",fontSize:12,fontFamily:"monospace",
+                  color:"var(--text-primary)",fontSize:12,fontFamily:"monospace",
                   boxSizing:"border-box",outline:"none",
                 }}
                 onFocus={e=>e.currentTarget.style.borderColor=unlockError?"#ef4444":"#0ea5e9"}
-                onBlur={e=>e.currentTarget.style.borderColor=unlockError?"#ef4444":"#334155"}
+                onBlur={e=>e.currentTarget.style.borderColor=unlockError?"#ef4444":"var(--border)"}
               />
               <button
                 onClick={()=>setShowNsecUnlock(!showNsecUnlock)}
                 style={{
                   position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
                   background:"none",border:"none",cursor:"pointer",
-                  color:"#64748b",fontSize:14,padding:"2px 4px",
+                  color:"var(--text-muted)",fontSize:14,padding:"2px 4px",
                 }}
                 tabIndex={-1}
               >{showNsecUnlock?"🙈":"👁"}</button>
@@ -8868,7 +9027,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
           {/* Error */}
           {unlockError&&(
             <div style={{color:"#fca5a5",fontSize:11,marginTop:10,padding:"6px 12px",
-              background:"#450a0a",borderRadius:6,border:"1px solid #991b1b",display:"inline-block"}}>
+              background:"var(--tint-red)",borderRadius:6,border:"1px solid var(--tint-red-border)",display:"inline-block"}}>
               {unlockError}
             </div>
           )}
@@ -8882,7 +9041,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
       <div style={{...S.card,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>⚙️ Practice Settings</div>
-          <div style={{fontSize:11,color:"#64748b"}}>Security & Key Management</div>
+          <div style={{fontSize:11,color:"var(--text-muted)"}}>Security & Key Management</div>
         </div>
       </div>
 
@@ -8902,7 +9061,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
               {copied==="npub"?"✓":"📋"}
             </Btn>
           </div>
-          <div style={{fontSize:10,color:"#64748b",marginTop:4}}>
+          <div style={{fontSize:10,color:"var(--text-muted)",marginTop:4}}>
             Share this with patients or other providers (public, safe to share)
           </div>
         </div>
@@ -8917,7 +9076,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
             {RELAY_URL}
           </div>
         </div>
-        <div style={{fontSize:11,color:"#64748b"}}>
+        <div style={{fontSize:11,color:"var(--text-muted)"}}>
           Self-hosted relay with whitelist authorization. Your public key is whitelisted.
         </div>
       </div>
@@ -8934,21 +9093,21 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
           </div>
         )}
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-          <div style={{flex:1,height:1,background:"#334155"}}/>
-          <span style={{fontSize:10,color:securityUnlocked?"#4ade80":"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+          <div style={{flex:1,height:1,background:"var(--border)"}}/>
+          <span style={{fontSize:10,color:securityUnlocked?"var(--accent-green)":"var(--text-muted)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>
             {securityUnlocked?"🔓 Unlocked — auto-locks in 5 min":"🔒 Protected Sections"}
           </span>
-          <div style={{flex:1,height:1,background:"#334155"}}/>
+          <div style={{flex:1,height:1,background:"var(--border)"}}/>
         </div>
       </div>
 
       <SecurityGate>
         {/* Critical Warning — top of locked section */}
-        <div style={{...S.card,background:"#450a0a",border:"1px solid #991b1b",marginBottom:16}}>
-          <div style={{fontWeight:700,fontSize:13,color:"#fca5a5",marginBottom:8}}>
+        <div style={{...S.card,background:"var(--tint-red)",border:"1px solid var(--tint-red-border)",marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:13,color:"var(--accent-red-text)",marginBottom:8}}>
             🚨 Critical: Backup Your Practice Keys
           </div>
-          <div style={{fontSize:11,color:"#fecaca",lineHeight:1.6}}>
+          <div style={{fontSize:11,color:"var(--accent-red-sub)",lineHeight:1.6}}>
             Your practice keys encrypt ALL patient data. If you lose them (clear browser data, switch computers, etc), 
             you will lose access to ALL patient records permanently. There is no password reset or recovery mechanism.
           </div>
@@ -8969,7 +9128,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
               🖨 Print Emergency Backup
             </Btn>
           </div>
-          <div style={{fontSize:10,color:"#64748b",marginTop:8}}>
+          <div style={{fontSize:10,color:"var(--text-muted)",marginTop:8}}>
             Store backup file on encrypted USB drive. Keep paper backup in secure physical location (safe, lockbox).
           </div>
         </div>
@@ -8980,7 +9139,7 @@ function SettingsView({keys,relay}:{keys:Keypair|null;relay:ReturnType<typeof us
         {/* Forget This Device */}
         <div style={{...S.card,marginTop:16}}>
           <div style={{fontWeight:600,fontSize:13,marginBottom:4}}>🗑️ Device Management</div>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--text-muted)",marginBottom:12}}>
             Remove all stored credentials from this browser. You&apos;ll need to enter your nsec and re-register YubiKeys on next login.
           </div>
           <Btn col="#ef4444" onClick={()=>{
@@ -9199,13 +9358,13 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
   };
 
   const CS={ // calendar styles inline
-    surface:"#111620", surfaceHi:"#1a2233", border:"#1e2d44",
-    text:"#e8edf5", muted:"#6b7fa3", accent:"#f7931a",
+    surface:"var(--bg-app)", surfaceHi:"var(--bg-hover)", border:"var(--border)",
+    text:"var(--text-primary)", muted:"var(--text-muted)", accent:"#f7931a",
     green:"#22c55e", red:"#ef4444", amber:"#f59e0b", blue:"#3b82f6", purple:"#8b5cf6",
   };
 
   // SSR guard — after all hooks, safe to return early now
-  if(!mounted) return <div style={{flex:1,background:"#111620"}}/>;
+  if(!mounted) return <div style={{flex:1,background:"var(--bg-app)"}}/>;
 
   return(
     <div style={{display:"flex",height:"calc(100vh - 52px)",overflow:"hidden",background:CS.surface,fontFamily:"'DM Sans',system-ui,sans-serif",fontSize:13,color:CS.text}}>
@@ -9338,7 +9497,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                         />
                         {/* Visit color dropdown */}
                         {visitColorMenu===appt.id&&(
-                          <div onClick={e=>e.stopPropagation()} style={{position:"absolute",left:14,top:0,zIndex:50,background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:8,padding:6,boxShadow:"0 8px 24px rgba(0,0,0,0.5)",minWidth:180}}>
+                          <div onClick={e=>e.stopPropagation()} style={{position:"absolute",left:14,top:0,zIndex:50,background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:8,padding:6,boxShadow:"0 8px 24px var(--shadow-heavy)",minWidth:180}}>
                             {Object.entries(VISIT_COLORS).map(([key,{color,label}])=>(
                               <div key={key} onClick={()=>{updateVisitField(appt.id,"visit_color",key);setVisitColorMenu(null);}}
                                 style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600,color:CS.text,background:(appt.visit_color||"")=== key?`${color}15`:"transparent"}}
@@ -9387,7 +9546,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                               <div style={{display:"flex",flex:1,gap:6,alignItems:"center"}}>
                                 <input autoFocus value={commentDraft} onChange={e=>setCommentDraft(e.target.value)}
                                   onKeyDown={e=>{if(e.key==="Enter"){updateVisitField(appt.id,"schedule_comment",commentDraft);setEditingComment(null);}if(e.key==="Escape")setEditingComment(null);}}
-                                  style={{flex:1,background:"#0d1117",border:`1px solid ${CS.accent}`,borderRadius:5,padding:"4px 8px",color:CS.text,fontSize:11,fontFamily:"inherit",outline:"none"}}
+                                  style={{flex:1,background:"var(--bg-input)",border:`1px solid ${CS.accent}`,borderRadius:5,padding:"4px 8px",color:"var(--text-primary)",fontSize:11,fontFamily:"inherit",outline:"none"}}
                                   placeholder="Add comment for staff…"
                                 />
                                 <button onClick={()=>{updateVisitField(appt.id,"schedule_comment",commentDraft);setEditingComment(null);}}
@@ -9449,7 +9608,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                         <div key={t} onClick={()=>setPendingChanges(p=>({...p,[idx]:{...p[idx],[t]:!active}}))}
                           style={{padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",
                             fontFamily:"monospace",
-                            background:active?"#22c55e20":"#1a2233",
+                            background:active?"#22c55e20":"var(--bg-hover)",
                             border:`1px solid ${active?CS.green:CS.border}`,
                             color:active?CS.green:CS.muted,
                           }}>{fmtT(t)}</div>
@@ -9469,20 +9628,20 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
 
       {/* ── New/Edit Appointment Modal ── */}
       {apptModal&&(
-        <div onClick={()=>setApptModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div onClick={()=>setApptModal(false)} style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:14,padding:"28px 32px",width:480,maxWidth:"95vw",maxHeight:"90vh",overflowY:"auto"}}>
             <h3 style={{fontSize:16,fontWeight:800,marginBottom:20,letterSpacing:"-0.01em"}}>{editingId?"Edit Appointment":"New Appointment"}</h3>
             <div style={{marginBottom:16}}>
               <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Patient</label>
               <select value={apptForm.patient_npub} onChange={e=>{const p=patients.find(pt=>pt.npub===e.target.value);setApptForm(f=>({...f,patient_npub:e.target.value,patient_name:p?.name||f.patient_name}));}}
-                style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}>
+                style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}>
                 <option value="">— Select patient —</option>
                 {patients.map(p=><option key={p.id} value={p.npub||""}>{p.name}</option>)}
               </select>
             </div>
             <div style={{marginBottom:16}}>
               <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Patient Name</label>
-              <input value={apptForm.patient_name} onChange={e=>setApptForm(f=>({...f,patient_name:e.target.value}))} style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}} placeholder="Name"/>
+              <input value={apptForm.patient_name} onChange={e=>setApptForm(f=>({...f,patient_name:e.target.value}))} style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}} placeholder="Name"/>
               {!editingId&&apptForm.patient_name&&!apptForm.patient_npub&&(
                 <div style={{marginTop:6,padding:"6px 10px",background:"#f59e0b10",border:"1px solid #f59e0b30",borderRadius:6,fontSize:11,color:CS.amber,display:"flex",alignItems:"center",gap:6}}>
                   ⚠️ No patient record selected — create a patient first so the appointment links to their chart.
@@ -9492,11 +9651,11 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
               <div>
                 <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Date</label>
-                <input type="date" value={apptForm.date} onChange={e=>setApptForm(f=>({...f,date:e.target.value}))} style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                <input type="date" value={apptForm.date} onChange={e=>setApptForm(f=>({...f,date:e.target.value}))} style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Type</label>
-                <select value={apptForm.appt_type} onChange={e=>setApptForm(f=>({...f,appt_type:e.target.value}))} style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}>
+                <select value={apptForm.appt_type} onChange={e=>setApptForm(f=>({...f,appt_type:e.target.value}))} style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}>
                   <option value="in_person">In Person</option>
                   <option value="phone">Phone</option>
                   <option value="video">Video</option>
@@ -9506,22 +9665,22 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
               <div>
                 <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Start Time</label>
-                <input type="time" value={apptForm.start_time} step={900} onChange={e=>setApptForm(f=>({...f,start_time:e.target.value}))} style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                <input type="time" value={apptForm.start_time} step={900} onChange={e=>setApptForm(f=>({...f,start_time:e.target.value}))} style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>End Time</label>
-                <input type="time" value={apptForm.end_time} step={900} onChange={e=>setApptForm(f=>({...f,end_time:e.target.value}))} style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                <input type="time" value={apptForm.end_time} step={900} onChange={e=>setApptForm(f=>({...f,end_time:e.target.value}))} style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
               </div>
             </div>
             {apptForm.appt_type==="video"&&(
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Video Link</label>
-                <input type="url" value={apptForm.video_url} onChange={e=>setApptForm(f=>({...f,video_url:e.target.value}))} placeholder="https://..." style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                <input type="url" value={apptForm.video_url} onChange={e=>setApptForm(f=>({...f,video_url:e.target.value}))} placeholder="https://..." style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
               </div>
             )}
             <div style={{marginBottom:24}}>
               <label style={{display:"block",fontSize:11,color:CS.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginBottom:6}}>Notes</label>
-              <textarea value={apptForm.notes} onChange={e=>setApptForm(f=>({...f,notes:e.target.value}))} rows={3} style={{width:"100%",background:"#1a2233",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}} placeholder="Chief complaint, visit reason..."/>
+              <textarea value={apptForm.notes} onChange={e=>setApptForm(f=>({...f,notes:e.target.value}))} rows={3} style={{width:"100%",background:"var(--bg-hover)",border:`1px solid ${CS.border}`,borderRadius:8,padding:"9px 12px",color:CS.text,fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}} placeholder="Chief complaint, visit reason..."/>
             </div>
             <div style={{display:"flex",gap:10,justifyContent:"flex-end",borderTop:`1px solid ${CS.border}`,paddingTop:16}}>
               <button onClick={()=>setApptModal(false)} style={{background:CS.surfaceHi,border:`1px solid ${CS.border}`,color:CS.text,borderRadius:7,padding:"7px 16px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
@@ -9533,7 +9692,7 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
 
       {/* ── Detail Modal ── */}
       {detailModal&&(
-        <div onClick={()=>setDetailModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div onClick={()=>setDetailModal(null)} style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:CS.surface,border:`1px solid ${CS.border}`,borderRadius:14,padding:"28px 32px",width:480,maxWidth:"95vw",maxHeight:"90vh",overflowY:"auto"}}>
             <h3 style={{fontSize:16,fontWeight:800,marginBottom:20}}>{detailModal.patient_name}</h3>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
@@ -9567,8 +9726,9 @@ function CalendarView({onStartVideo,onOpenChart,keys,relay}:{onStartVideo?:(appt
                   setDetailModal(null);
                 }catch(e){ alert("Cannot start video: invalid patient key"); }
               }} style={{
-                width:"100%",padding:"12px",borderRadius:8,border:"none",
-                background:`${CS.green}20`,color:CS.green,fontSize:14,fontWeight:700,
+                width:"100%",padding:"12px",borderRadius:8,
+                background:"var(--tint-green)",color:"var(--accent-green-text)",fontSize:14,fontWeight:700,
+                border:"1px solid var(--accent-green)",
                 cursor:"pointer",fontFamily:"inherit",marginBottom:12,
                 display:"flex",alignItems:"center",justifyContent:"center",gap:8,
               }}>
@@ -9778,13 +9938,13 @@ function VitalsHistory({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
       <div style={{fontWeight:700,fontSize:14}}>🩺 Vitals</div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        {status==="saved"&&<Badge t="✓ Saved" col="#4ade80" bg="#052e16"/>}
-        {status==="error"&&<Badge t="✗ Error" col="#f87171" bg="#450a0a"/>}
+        {status==="saved"&&<Badge t="✓ Saved" col="var(--accent-green)" bg="var(--tint-green)"/>}
+        {status==="error"&&<Badge t="✗ Error" col="#f87171" bg="var(--tint-red)"/>}
         <Btn small solid={!adding} col="#0ea5e9" onClick={()=>setAdding(!adding)}>{adding?"Cancel":"+ Record Vitals"}</Btn>
       </div>
     </div>
 
-    {adding&&<div style={{...S.card,background:"#0a1628",border:"1px solid #1e3a5f",marginBottom:16}}>
+    {adding&&<div style={{...S.card,background:"var(--bg-deep)",border:"1px solid var(--border-accent)",marginBottom:16}}>
       <div style={{fontWeight:600,fontSize:12,marginBottom:12,color:"#7dd3fc"}}>📊 New Vitals Entry</div>
       
       {/* Row 1: BP + Temp + HR + RR */}
@@ -9794,7 +9954,7 @@ function VitalsHistory({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
           <input value={form.bp_systolic} onChange={e=>set("bp_systolic",e.target.value)}
             type="number" placeholder="120" style={{...S.input,fontSize:12}}/>
         </div>
-        <div style={{textAlign:"center",paddingBottom:8,color:"#475569",fontSize:14}}>/</div>
+        <div style={{textAlign:"center",paddingBottom:8,color:"var(--text-label)",fontSize:14}}>/</div>
         <div>
           <label style={S.lbl}>Diastolic BP</label>
           <input value={form.bp_diastolic} onChange={e=>set("bp_diastolic",e.target.value)}
@@ -9802,7 +9962,7 @@ function VitalsHistory({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
         </div>
         <div>
           <label style={{...S.lbl,opacity:0}}>_</label>
-          <Badge t="mmHg" col="#f87171" bg="#450a0a"/>
+          <Badge t="mmHg" col="#f87171" bg="var(--tint-red)"/>
         </div>
         <div>
           <label style={S.lbl}>Temp</label>
@@ -9871,15 +10031,15 @@ function VitalsHistory({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
       </Btn>
     </div>}
 
-    {records.length===0&&!adding&&<div style={{...S.card,color:"#334155",textAlign:"center",padding:32}}>
+    {records.length===0&&!adding&&<div style={{...S.card,color:"var(--text-faint)",textAlign:"center",padding:32}}>
       No vitals recorded
     </div>}
 
     {records.map((rec:any,i:number)=>(
       <div key={i} style={{...S.card,marginBottom:10}}>
-        <div style={{fontSize:11,color:"#475569",marginBottom:10,fontWeight:600,display:"flex",justifyContent:"space-between"}}>
+        <div style={{fontSize:11,color:"var(--text-label)",marginBottom:10,fontWeight:600,display:"flex",justifyContent:"space-between"}}>
           <span>{new Date(rec.date).toLocaleDateString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric'})}</span>
-          {rec.authors?.length>0&&rec.items.every((it:any)=>it._authorName)&&<span style={{fontSize:10,color:"#64748b",fontWeight:400,fontStyle:"italic"}}>
+          {rec.authors?.length>0&&rec.items.every((it:any)=>it._authorName)&&<span style={{fontSize:10,color:"var(--text-muted)",fontWeight:400,fontStyle:"italic"}}>
             by {rec.authors.join(", ")}
           </span>}
         </div>
@@ -9888,9 +10048,9 @@ function VitalsHistory({patient,keys,relay}:{patient:Patient;keys:Keypair|null;r
             const val=getVal(rec.items,key);
             if(!val)return null;
             return(
-              <div key={key} style={{background:"#0f172a",borderRadius:8,padding:"8px 10px",borderLeft:`3px solid ${col}`}}>
-                <div style={{fontSize:9,color:"#64748b",marginBottom:2}}>{icon} {label}</div>
-                <div style={{fontSize:12,fontWeight:600,color:"#e2e8f0"}}>{val}</div>
+              <div key={key} style={{background:"var(--bg-app)",borderRadius:8,padding:"8px 10px",borderLeft:`3px solid ${col}`}}>
+                <div style={{fontSize:9,color:"var(--text-muted)",marginBottom:2}}>{icon} {label}</div>
+                <div style={{fontSize:12,fontWeight:600,color:"var(--text-primary)"}}>{val}</div>
               </div>
             );
           })}
@@ -10133,14 +10293,14 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
       {/* Inbox header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
         <div>
-          <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:2}}>
+          <div style={{fontSize:18,fontWeight:700,color:"var(--text-primary)",marginBottom:2}}>
             Inbox
             {unreadCount>0&&<span style={{
               background:"#ef4444",color:"#fff",borderRadius:99,
               padding:"2px 8px",fontSize:11,fontWeight:700,marginLeft:10,verticalAlign:"middle",
             }}>{unreadCount} new</span>}
           </div>
-          <div style={{fontSize:12,color:"#475569"}}>
+          <div style={{fontSize:12,color:"var(--text-label)"}}>
             {activeMsgs.length===0?"No active threads":`${activeMsgs.length} active thread${activeMsgs.length!==1?"s":""}`}
           </div>
         </div>
@@ -10150,7 +10310,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
               const clearable=activeMsgs.filter(m=>read.has(m.id)&&!m.hasUnread&&!starred.has(m.id));
               if(confirm(`Done ${clearable.length} read+replied threads?`)) clearable.forEach(m=>markDone(m.id));
             }} style={{
-              background:"#1e293b",border:"1px solid #334155",color:"#64748b",
+              background:"var(--bg-card)",border:"1px solid var(--border)",color:"var(--text-muted)",
               borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 14px",fontWeight:600,
             }} title="Mark done: threads that are read and where you spoke last (excludes starred and patient-waiting)">
               ✓ Done replied ({activeMsgs.filter(m=>read.has(m.id)&&!m.hasUnread&&!starred.has(m.id)).length})
@@ -10158,7 +10318,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
           )}
           {recentDone.length>0&&(
             <button onClick={e=>{e.stopPropagation();setShowRecent(v=>!v);}} style={{
-              background:"#1e293b",border:"1px solid #334155",color:showRecent?"#e2e8f0":"#64748b",
+              background:"var(--bg-card)",border:"1px solid var(--border)",color:showRecent?"var(--text-primary)":"var(--text-muted)",
               borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 14px",fontWeight:600,
             }}>
               {showRecent?"Hide":"Recent done"} ({recentDone.length})
@@ -10168,9 +10328,9 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
       </div>
 
       {/* Thread list */}
-      <div style={{flex:1,overflowY:"auto",borderRadius:10,border:"1px solid #1e293b",background:"#080f1d"}}>
+      <div style={{flex:1,overflowY:"auto",borderRadius:10,border:"1px solid var(--border-subtle)",background:"var(--bg-app)"}}>
         {activeMsgs.length===0&&!showRecent&&(
-          <div style={{padding:"48px 24px",color:"#334155",fontSize:13,textAlign:"center"}}>
+          <div style={{padding:"48px 24px",color:"var(--text-faint)",fontSize:13,textAlign:"center"}}>
             <div style={{fontSize:32,marginBottom:12}}>📭</div>
             No active messages
           </div>
@@ -10183,7 +10343,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
           const hasNote=!!notes[msg.id];
           const msgCount=(msg as any).msgCount||1;
           const borderColor=isStarred?"#f59e0b":hasUnread?"#0ea5e9":"transparent";
-          const bgColor=isStarred?"#1a1400":hasUnread?"#0a1628":"#080f1d";
+          const bgColor=isStarred?"var(--bg-inset)":hasUnread?"var(--bg-inset)":"var(--bg-app)";
           return(
             <div key={msg.id}>
               <div
@@ -10191,14 +10351,14 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                 onContextMenu={e=>handleCtx(e,msg.id,msg.patientId,(msg as any).noReply)}
                 style={{
                   padding:"7px 16px",
-                  borderBottom:i<activeMsgs.length-1?"1px solid #0d1527":"none",
+                  borderBottom:i<activeMsgs.length-1?"1px solid var(--border-subtle)":"none",
                   cursor:"pointer",
                   background:bgColor,
                   borderLeft:`3px solid ${borderColor}`,
                   transition:"background 0.1s",
                   display:"flex",alignItems:"center",gap:12,
                 }}
-                onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="#0d1929"}
+                onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="var(--bg-hover)"}
                 onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=bgColor}
               >
                 {/* Star toggle */}
@@ -10212,9 +10372,9 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                 {/* Avatar circle */}
                 <div style={{
                   width:32,height:32,borderRadius:"50%",flexShrink:0,
-                  background:isStarred?"linear-gradient(135deg,#f59e0b,#d97706)":hasUnread?"linear-gradient(135deg,#0ea5e9,#3b82f6)":"#1a2640",
+                  background:isStarred?"linear-gradient(135deg,#f59e0b,#d97706)":hasUnread?"linear-gradient(135deg,#0ea5e9,#3b82f6)":"var(--bg-deep)",
                   display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:13,fontWeight:700,color:(hasUnread||isStarred)?"#fff":"#475569",
+                  fontSize:13,fontWeight:700,color:(hasUnread||isStarred)?"#fff":"var(--text-label)",
                 }}>
                   {msg.patientName.charAt(0).toUpperCase()}
                 </div>
@@ -10222,7 +10382,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                 {/* Patient name — fixed width */}
                 <div style={{width:120,flexShrink:0,
                   fontSize:13,fontWeight:hasUnread?700:400,
-                  color:hasUnread?"#e2e8f0":"#64748b",
+                  color:hasUnread?"var(--text-primary)":"var(--text-muted)",
                   overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
                   {msg.patientName}
                 </div>
@@ -10230,16 +10390,16 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                 {/* Subject — fixed width */}
                 <div style={{width:150,flexShrink:0,
                   fontSize:12,fontWeight:hasUnread?600:400,
-                  color:hasUnread?"#7dd3fc":"#475569",
+                  color:hasUnread?"#0ea5e9":"var(--text-label)",
                   overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
                   {isClosed&&<span title="Thread closed — no reply" style={{marginRight:4}}>🔒</span>}
                   {msg.subject}
-                  {msgCount>1&&<span style={{fontSize:10,color:"#334155",background:"#111f33",borderRadius:99,padding:"1px 5px",marginLeft:5}}>{msgCount}</span>}
+                  {msgCount>1&&<span style={{fontSize:10,color:"var(--text-faint)",background:"var(--bg-deep)",borderRadius:99,padding:"1px 5px",marginLeft:5}}>{msgCount}</span>}
                 </div>
 
                 {/* Preview — takes remaining space */}
                 <div style={{flex:1,minWidth:0,
-                  fontSize:12,color:"#334155",
+                  fontSize:12,color:"var(--text-muted)",
                   overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
                   {msg.preview}
                 </div>
@@ -10256,7 +10416,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
 
                 {/* Indicators — far right */}
                 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                  <div style={{fontSize:11,color:hasUnread?"#64748b":"#334155",minWidth:36,textAlign:"right"}}>
+                  <div style={{fontSize:11,color:hasUnread?"var(--text-label)":"var(--text-faint)",minWidth:36,textAlign:"right"}}>
                     {relT(msg.ts)}
                   </div>
                   {hasUnread&&(
@@ -10271,7 +10431,7 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
         {/* Recent done section */}
         {showRecent&&recentDone.length>0&&(
           <div>
-            <div style={{padding:"8px 20px",fontSize:10,color:"#334155",textTransform:"uppercase",letterSpacing:"0.5px",borderTop:"1px solid #1e293b",background:"#060d18"}}>
+            <div style={{padding:"8px 20px",fontSize:10,color:"var(--text-faint)",textTransform:"uppercase",letterSpacing:"0.5px",borderTop:"1px solid var(--border-subtle)",background:"var(--bg-deep)"}}>
               Done · last 48h — right-click to restore
             </div>
             {recentDone.map(d=>{
@@ -10282,13 +10442,13 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
                   style={{padding:"6px 16px",borderBottom:"1px solid #0a0f1a",opacity:0.45,cursor:"pointer",
                     display:"flex",alignItems:"center",gap:12}}
                   onContextMenu={e=>handleCtx(e,d.id,"",false)}>
-                  <div style={{width:28,height:28,borderRadius:"50%",background:"#1a2640",
-                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#475569",fontWeight:700,flexShrink:0}}>
+                  <div style={{width:28,height:28,borderRadius:"50%",background:"var(--bg-deep)",
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"var(--text-label)",fontWeight:700,flexShrink:0}}>
                     {msg.patientName.charAt(0).toUpperCase()}
                   </div>
-                  <div style={{width:130,flexShrink:0,fontSize:12,color:"#64748b",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{msg.patientName}</div>
-                  <div style={{flex:1,minWidth:0,fontSize:11,color:"#334155",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{msg.subject}</div>
-                  <div style={{fontSize:10,color:"#334155",flexShrink:0}}>{relT(Math.floor(d.ts/1000))}</div>
+                  <div style={{width:130,flexShrink:0,fontSize:12,color:"var(--text-muted)",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{msg.patientName}</div>
+                  <div style={{flex:1,minWidth:0,fontSize:11,color:"var(--text-faint)",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{msg.subject}</div>
+                  <div style={{fontSize:10,color:"var(--text-faint)",flexShrink:0}}>{relT(Math.floor(d.ts/1000))}</div>
                 </div>
               );
             })}
@@ -10298,20 +10458,20 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
 
       {/* Note editor modal */}
       {editingNote&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}
+        <div style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}
           onClick={()=>{setNote(editingNote,noteText);setEditingNote(null);}}>
-          <div style={{background:"#1e293b",border:"1px solid #334155",borderRadius:12,padding:20,width:400,maxWidth:"90vw"}}
+          <div style={{background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:12,padding:20,width:400,maxWidth:"90vw"}}
             onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginBottom:12}}>📝 Staff Note</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--text-primary)",marginBottom:12}}>📝 Staff Note</div>
             <textarea value={noteText} onChange={e=>setNoteText(e.target.value)}
               placeholder="Internal note (only visible to staff)..."
               rows={3} autoFocus
-              style={{width:"100%",boxSizing:"border-box" as const,background:"#0f172a",border:"1px solid #334155",borderRadius:8,color:"#e2e8f0",fontSize:13,padding:"10px 12px",resize:"vertical" as const,fontFamily:"inherit",lineHeight:1.5}}
+              style={{width:"100%",boxSizing:"border-box" as const,background:"var(--bg-app)",border:"1px solid var(--border)",borderRadius:8,color:"var(--text-primary)",fontSize:13,padding:"10px 12px",resize:"vertical" as const,fontFamily:"inherit",lineHeight:1.5}}
             />
             <div style={{display:"flex",gap:8,marginTop:12,justifyContent:"flex-end"}}>
               {notes[editingNote]&&(
                 <button onClick={()=>{setNote(editingNote,"");setNoteText("");setEditingNote(null);}} style={{
-                  background:"none",border:"1px solid #334155",color:"#f87171",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit",
+                  background:"none",border:"1px solid var(--border)",color:"#f87171",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"inherit",
                 }}>Delete note</button>
               )}
               <button onClick={()=>{setNote(editingNote,noteText);setEditingNote(null);}} style={{
@@ -10326,41 +10486,41 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
       {ctxMenu&&(
         <div style={{
           position:"fixed",left:ctxMenu.x,top:ctxMenu.y,
-          background:"#1e293b",border:"1px solid #334155",borderRadius:8,
-          zIndex:9999,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",overflow:"hidden",minWidth:180,
+          background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:8,
+          zIndex:9999,boxShadow:"0 8px 32px var(--shadow-heavy)",overflow:"hidden",minWidth:180,
         }}
           onClick={e=>e.stopPropagation()}>
           {done.has(ctxMenu.msgId)?(
             <button onClick={()=>{undoDone(ctxMenu.msgId);setCtxMenu(null);}} style={{
               display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
-              color:"#e2e8f0",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+              color:"var(--text-primary)",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
             }}>↩ Restore to inbox</button>
           ):(
             <>
               {read.has(ctxMenu.msgId)?(
                 <button onClick={()=>{markUnread(ctxMenu.msgId);setCtxMenu(null);}} style={{
                   display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
-                  color:"#e2e8f0",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+                  color:"var(--text-primary)",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
                 }}>● Mark as unread</button>
               ):(
                 <button onClick={()=>{markRead(ctxMenu.msgId);setCtxMenu(null);}} style={{
                   display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
-                  color:"#e2e8f0",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+                  color:"var(--text-primary)",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
                 }}>○ Mark as read</button>
               )}
               <button onClick={()=>{toggleStar(ctxMenu.msgId);setCtxMenu(null);}} style={{
                 display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
                 color:"#f59e0b",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
-                borderTop:"1px solid #334155",
+                borderTop:"1px solid var(--border)",
               }}>{starred.has(ctxMenu.msgId)?"☆ Unstar":"⭐ Star (waiting)"}</button>
               <button onClick={()=>{setEditingNote(ctxMenu.msgId);setNoteText(notes[ctxMenu.msgId]||"");setCtxMenu(null);}} style={{
                 display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
-                color:"#e2e8f0",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+                color:"var(--text-primary)",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
               }}>{notes[ctxMenu.msgId]?"📝 Edit note":"📝 Add note"}</button>
               <button onClick={()=>{markDone(ctxMenu.msgId);setCtxMenu(null);}} style={{
                 display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",
                 color:"#f87171",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
-                borderTop:"1px solid #334155",
+                borderTop:"1px solid var(--border)",
               }}>✓ Done</button>
             </>
           )}
@@ -10372,26 +10532,26 @@ function InboxView({keys,relay,patients,onOpenPatientMessages,onUnreadChange}:{
 
 
 // ─── Patient List Sidebar ─────────────────────────────────────────────────────
-function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,staffSession}:{
+function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,staffSession,dark,onToggleTheme}:{
   patients:Patient[];selected:Patient|null;onSelect:(p:Patient)=>void;onAdd:()=>void;onSettings:()=>void;search:string;
-  staffSession?:StaffSession|null;
+  staffSession?:StaffSession|null;dark?:boolean;onToggleTheme?:()=>void;
 }){
   const roleColors:Record<string,string>={doctor:"#8b5cf6",nurse:"#0ea5e9",ma:"#22c55e",frontdesk:"#f59e0b"};
 
   return(
-    <div style={{width:180,background:"#080f1d",borderRight:"1px solid #1e293b",
+    <div style={{width:180,background:"var(--bg-sidebar)",borderRight:"1px solid var(--border-subtle)",
       display:"flex",flexDirection:"column",flexShrink:0,minHeight:"100vh"}}>
 
       {/* Logo + staff banner */}
-      <div style={{padding:"16px 14px 12px",borderBottom:"1px solid #1e293b"}}>
+      <div style={{padding:"16px 14px 12px",borderBottom:"1px solid var(--border-subtle)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:staffSession?10:0}}>
           <div style={{width:30,height:30,borderRadius:7,
             background:"linear-gradient(135deg,#06b6d4,#3b82f6)",
             display:"flex",alignItems:"center",justifyContent:"center",
             color:"#fff",fontWeight:700,fontSize:14,flexShrink:0}}>N</div>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>NostrEHR</div>
-            <div style={{color:"#4ade80",fontSize:9,textTransform:"uppercase",letterSpacing:"0.5px"}}>v1.1</div>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--text-primary)"}}>NostrEHR</div>
+            <div style={{color:"var(--accent-green)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.5px"}}>v1.2</div>
           </div>
         </div>
         {staffSession&&(
@@ -10401,7 +10561,7 @@ function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,
             <div style={{fontSize:11,fontWeight:600,color:roleColors[staffSession.role]}}>
               {staffSession.staffName}
             </div>
-            <div style={{fontSize:9,color:"#64748b",textTransform:"capitalize"}}>
+            <div style={{fontSize:9,color:"var(--text-muted)",textTransform:"capitalize"}}>
               {staffSession.role} · {staffSession.patientSecrets.size} pts
             </div>
           </div>
@@ -10412,13 +10572,13 @@ function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,
       <div style={{flex:1}}/>
 
       {/* Bottom actions */}
-      <div style={{padding:"8px 12px",borderTop:"1px solid #1e293b"}}>
+      <div style={{padding:"8px 12px",borderTop:"1px solid var(--border-subtle)"}}>
         {!staffSession&&(
           <a href={`${BILLING_URL}/dashboard`} target="_blank" rel="noopener noreferrer"
              style={{textDecoration:"none",display:"block",marginBottom:8}}>
             <button style={{
-              width:"100%",background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:7,
-              padding:"7px 10px",color:"#7dd3fc",fontSize:11,fontWeight:600,cursor:"pointer",
+              width:"100%",background:"var(--bg-inset)",border:"1px solid var(--border-accent)",borderRadius:7,
+              padding:"7px 10px",color:"var(--accent-blue)",fontSize:11,fontWeight:600,cursor:"pointer",
               display:"flex",alignItems:"center",justifyContent:"center",gap:5,fontFamily:"inherit"
             }}>
               💳 Billing
@@ -10427,6 +10587,7 @@ function PatientListSidebar({patients,selected,onSelect,onAdd,onSettings,search,
         )}
         <div style={{display:"flex",gap:6}}>
           {!staffSession&&<Btn solid col="#0ea5e9" onClick={onAdd}>+ Patient</Btn>}
+          <Btn col="#475569" onClick={onToggleTheme} title={dark?"Switch to light mode":"Switch to dark mode"}>{dark?"☀️":"🌙"}</Btn>
           <Btn col="#475569" onClick={onSettings}>⚙️</Btn>
         </div>
       </div>
@@ -10854,8 +11015,8 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
     }}>
       <div style={{
         width: 380, background: "rgba(30,41,59,0.92)", borderRadius: 16,
-        border: "1px solid #33415588", padding: "40px 36px",
-        boxShadow: "0 25px 50px rgba(0,0,0,0.5)",
+        border: "1px solid var(--border)", padding: "40px 36px",
+        boxShadow: "0 25px 50px var(--shadow-heavy)",
         backdropFilter: "blur(12px)",
       }}>
         {/* Header */}
@@ -10866,10 +11027,10 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
             display: "inline-flex", alignItems: "center", justifyContent: "center",
             marginBottom: 16,
           }}><img src="/icon.png" alt="" style={{width:52,height:52}} /></div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: "#e2e8f0" }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>
             {PRACTICE_NAME.split(" ").length > 2 ? PRACTICE_NAME.split(" ").slice(0, -1).join(" ") : PRACTICE_NAME}
           </div>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
             {PRACTICE_NAME.split(" ").length > 2 ? PRACTICE_NAME.split(" ").slice(-1)[0] : "EHR"}
           </div>
         </div>
@@ -10877,7 +11038,7 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
         {/* Timed out notice */}
         {timedOut && (
           <div style={{
-            background: "#172554", border: "1px solid #1e3a5f", borderRadius: 8,
+            background: "#172554", border: "1px solid var(--border-accent)", borderRadius: 8,
             padding: "10px 14px", marginBottom: 20, textAlign: "center",
           }}>
             <div style={{ fontSize: 12, color: "#93c5fd" }}>
@@ -10907,11 +11068,11 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
             </button>
             <div style={{
               display: "flex", alignItems: "center", gap: 12,
-              margin: "16px 0", color: "#475569", fontSize: 11,
+              margin: "16px 0", color: "var(--text-label)", fontSize: 11,
             }}>
-              <div style={{ flex: 1, height: 1, background: "#334155" }} />
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
               <span>or enter manually</span>
-              <div style={{ flex: 1, height: 1, background: "#334155" }} />
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
           </div>
         )}
@@ -10924,22 +11085,22 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
               disabled={loading}
               style={{
                 width: "100%", padding: "20px 16px",
-                background: yubiKeyPrompt && loading ? "#0c4a6e" : "#0f172a",
-                border: `2px solid ${yubiKeyPrompt && loading ? "#0ea5e9" : "#334155"}`,
+                background: yubiKeyPrompt && loading ? "#0c4a6e" : "var(--bg-app)",
+                border: `2px solid ${yubiKeyPrompt && loading ? "#0ea5e9" : "var(--border)"}`,
                 borderRadius: 12, cursor: loading ? "default" : "pointer",
                 transition: "all 0.2s",
               }}
               onMouseEnter={e => { if (!loading) e.currentTarget.style.borderColor = "#0ea5e9"; }}
-              onMouseLeave={e => { if (!loading) e.currentTarget.style.borderColor = "#334155"; }}
+              onMouseLeave={e => { if (!loading) e.currentTarget.style.borderColor = "var(--border)"; }}
             >
               <div style={{
                 fontSize: 22, marginBottom: 8,
                 animation: yubiKeyPrompt && loading ? "pulse 1.5s ease-in-out infinite" : "none",
               }}>🔑</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", marginBottom: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
                 {yubiKeyPrompt && loading ? "Waiting for YubiKey…" : "Tap YubiKey to sign in"}
               </div>
-              <div style={{ fontSize: 11, color: "#64748b" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                 {authStore?.credentials.length === 1
                   ? `1 key registered`
                   : `${authStore?.credentials.length} keys registered`}
@@ -10952,18 +11113,18 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
         {hasYubiKeys && (
           <div style={{
             display: "flex", alignItems: "center", gap: 12,
-            marginBottom: 20, color: "#475569", fontSize: 11,
+            marginBottom: 20, color: "var(--text-label)", fontSize: 11,
           }}>
-            <div style={{ flex: 1, height: 1, background: "#334155" }} />
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             <span>or enter manually</span>
-            <div style={{ flex: 1, height: 1, background: "#334155" }} />
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           </div>
         )}
 
         {/* Manual nsec entry */}
         <div style={{ marginBottom: 16 }}>
           <label style={{
-            color: "#475569", fontSize: 10, textTransform: "uppercase",
+            color: "var(--text-label)", fontSize: 10, textTransform: "uppercase",
             letterSpacing: "0.6px", marginBottom: 6, display: "block",
           }}>
             Practice Key
@@ -10978,22 +11139,22 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
               autoComplete="off"
               spellCheck={false}
               style={{
-                width: "100%", background: "#0f172a",
-                border: `1px solid ${error ? "#ef4444" : "#334155"}`,
+                width: "100%", background: "var(--bg-app)",
+                border: `1px solid ${error ? "#ef4444" : "var(--border)"}`,
                 borderRadius: 8, padding: "12px 42px 12px 14px",
-                color: "#e2e8f0", fontSize: 13, fontFamily: "monospace",
+                color: "var(--text-primary)", fontSize: 13, fontFamily: "monospace",
                 boxSizing: "border-box", outline: "none",
                 transition: "border-color 0.2s",
               }}
               onFocus={e => e.currentTarget.style.borderColor = error ? "#ef4444" : "#0ea5e9"}
-              onBlur={e => e.currentTarget.style.borderColor = error ? "#ef4444" : "#334155"}
+              onBlur={e => e.currentTarget.style.borderColor = error ? "#ef4444" : "var(--border)"}
             />
             <button
               onClick={() => setShowNsec(!showNsec)}
               style={{
                 position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
                 background: "none", border: "none", cursor: "pointer",
-                color: "#64748b", fontSize: 16, padding: "2px 4px",
+                color: "var(--text-muted)", fontSize: 16, padding: "2px 4px",
               }}
               tabIndex={-1}
             >
@@ -11006,7 +11167,7 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
         {error && (
           <div style={{
             color: "#fca5a5", fontSize: 12, marginBottom: 14,
-            padding: "8px 12px", background: "#450a0a", borderRadius: 6,
+            padding: "8px 12px", background: "var(--tint-red)", borderRadius: 6,
             border: "1px solid #991b1b",
           }}>
             {error}
@@ -11025,7 +11186,7 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
               onChange={e => setRememberDevice(e.target.checked)}
               style={{ accentColor: "#0ea5e9" }}
             />
-            <span style={{ color: "#94a3b8", fontSize: 12 }}>
+            <span style={{ color: "var(--text-secondary)", fontSize: 12 }}>
               Remember this device
             </span>
           </label>
@@ -11038,10 +11199,10 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
           style={{
             width: "100%", padding: "12px 16px",
             background: !nsecInput.trim() || loading
-              ? "#1e293b"
+              ? "var(--bg-card)"
               : "linear-gradient(90deg, #0ea5e9cc, #0ea5e9)",
             border: "1px solid #0ea5e944",
-            borderRadius: 8, color: !nsecInput.trim() || loading ? "#475569" : "#fff",
+            borderRadius: 8, color: !nsecInput.trim() || loading ? "var(--text-label)" : "#fff",
             fontSize: 14, fontWeight: 600, cursor: !nsecInput.trim() || loading ? "not-allowed" : "pointer",
             fontFamily: "inherit", transition: "all 0.2s",
           }}
@@ -11052,7 +11213,7 @@ function LoginScreen({ onLogin }: { onLogin: (keys: Keypair) => void }) {
         {/* Footer */}
         <div style={{
           textAlign: "center", marginTop: 24,
-          color: "#475569", fontSize: 11,
+          color: "var(--text-label)", fontSize: 11,
         }}>
           <span style={{ marginRight: 4 }}>🔒</span>
           Your key never leaves this device
@@ -11136,7 +11297,7 @@ function YubiKeyManager({ keys }: { keys: Keypair }) {
   return (
     <div style={{ ...S.card, marginTop: 16 }}>
       <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>🔑 YubiKey Authentication</div>
-      <div style={{ fontSize: 11, color: "#64748b", marginBottom: 16 }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 16 }}>
         Register a YubiKey for tap-to-login. Your practice key is encrypted and can only be unlocked with the physical key.
       </div>
 
@@ -11144,14 +11305,14 @@ function YubiKeyManager({ keys }: { keys: Keypair }) {
       {authStore?.credentials.map(cred => (
         <div key={cred.credentialId} style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 14px", background: "#0f172a", borderRadius: 8,
-          marginBottom: 8, border: "1px solid #334155",
+          padding: "10px 14px", background: "var(--bg-app)", borderRadius: 8,
+          marginBottom: 8, border: "1px solid var(--border)",
         }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>
               🔑 {cred.name}
             </div>
-            <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
               Registered {new Date(cred.registeredAt).toLocaleDateString()}
             </div>
           </div>
@@ -11170,7 +11331,7 @@ function YubiKeyManager({ keys }: { keys: Keypair }) {
       ) : (
         <div style={{
           fontSize: 11, color: "#f59e0b", padding: "10px 14px",
-          background: "#422006", borderRadius: 8, border: "1px solid #92400e",
+          background: "var(--tint-amber)", borderRadius: 8, border: "1px solid var(--tint-amber-border)",
         }}>
           Your browser does not support hardware key encryption (PRF extension). Use Chrome 116+ for YubiKey support.
         </div>
@@ -11178,7 +11339,7 @@ function YubiKeyManager({ keys }: { keys: Keypair }) {
 
       {/* Status message */}
       {status && (
-        <div style={{ fontSize: 11, color: status.startsWith("✓") ? "#4ade80" : "#fbbf24", marginTop: 8 }}>
+        <div style={{ fontSize: 11, color: status.startsWith("✓") ? "var(--accent-green)" : "#fbbf24", marginTop: 8 }}>
           {status}
         </div>
       )}
@@ -11204,6 +11365,7 @@ export default function Home(){
   const [advSearch,setAdvSearch]=useState({phone:"",dob:"",email:"",address:"",city:"",state:"",zip:""});
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const relay=useRelay();
+  const theme=useTheme();
   const [videoCall, setVideoCall] = useState<{appointmentId:number;patientName:string;patientPkHex:string}|null>(null);
   // Multi-user: staff session (null = logged in as practice owner)
   const [staffSession,setStaffSession]=useState<StaffSession|null>(null);
@@ -11665,14 +11827,14 @@ export default function Home(){
           {staffBootstrapping || (!staffSession && !staffError) ? (
             <>
               <div style={{fontSize:32,marginBottom:16,animation:"pulse 1.5s ease-in-out infinite"}}>🔑</div>
-              <div style={{fontSize:16,fontWeight:600,color:"#e2e8f0",marginBottom:8}}>Loading Staff Session…</div>
-              <div style={{fontSize:12,color:"#64748b"}}>Fetching authorization and decryption keys from relay</div>
+              <div style={{fontSize:16,fontWeight:600,color:"var(--text-primary)",marginBottom:8}}>Loading Staff Session…</div>
+              <div style={{fontSize:12,color:"var(--text-muted)"}}>Fetching authorization and decryption keys from relay</div>
             </>
           ) : (
             <>
               <div style={{fontSize:32,marginBottom:16}}>⚠️</div>
               <div style={{fontSize:16,fontWeight:600,color:"#fca5a5",marginBottom:8}}>Staff Login Failed</div>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:20,lineHeight:1.6}}>{staffError}</div>
+              <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:20,lineHeight:1.6}}>{staffError}</div>
               <Btn col="#64748b" onClick={()=>{
                 localStorage.removeItem(REMEMBERED_SK_KEY);
                 localStorage.removeItem("nostr_ehr_practice_sk");
@@ -11698,6 +11860,8 @@ export default function Home(){
         onSettings={()=>{setView("settings");setActivePatientId(null);setAdding(false);}}
         search={patientSearch}
         staffSession={staffSession}
+        dark={theme.dark}
+        onToggleTheme={theme.toggle}
       />
       <div style={S.panel}>
         
@@ -11705,17 +11869,17 @@ export default function Home(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",gap:16}}>
             <button onClick={()=>{setView("schedule");setActivePatientId(null);setAdding(false);}} style={{
-              background:"transparent",border:"none",color:view==="schedule"?"#0ea5e9":"#64748b",
+              background:"transparent",border:"none",color:view==="schedule"?"var(--tab-active)":"var(--text-muted)",
               fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",
-              borderBottom:view==="schedule"?"2px solid #0ea5e9":"2px solid transparent",
+              borderBottom:view==="schedule"?"2px solid var(--tab-active)":"2px solid transparent",
               fontFamily:"inherit"
             }}>
               📅 Schedule
             </button>
             <button onClick={()=>setView("patients")} style={{
-              background:"transparent",border:"none",color:view==="patients"||activePatient?"#0ea5e9":"#64748b",
+              background:"transparent",border:"none",color:view==="patients"||activePatient?"var(--tab-active)":"var(--text-muted)",
               fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",
-              borderBottom:view==="patients"||activePatient?"2px solid #0ea5e9":"2px solid transparent",
+              borderBottom:view==="patients"||activePatient?"2px solid var(--tab-active)":"2px solid transparent",
               fontFamily:"inherit"
             }}>
               👥 Patients
@@ -11724,9 +11888,9 @@ export default function Home(){
             {(!staffSession||staffSession.role==="doctor")&&(
               <button onClick={()=>{setView("inbox");setActivePatientId(null);setAdding(false);}} style={{
                 background:"transparent",border:"none",
-                color:view==="inbox"?"#0ea5e9":"#64748b",
+                color:view==="inbox"?"var(--tab-active)":"var(--text-muted)",
                 fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",
-                borderBottom:view==="inbox"?"2px solid #0ea5e9":"2px solid transparent",
+                borderBottom:view==="inbox"?"2px solid var(--tab-active)":"2px solid transparent",
                 fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,
               }}>
                 📬 Inbox
@@ -11753,12 +11917,12 @@ export default function Home(){
                 {/* Advanced search link */}
                 <button onClick={()=>{setShowAdvSearch(v=>!v);setPatientSearch("");}}
                   style={{position:"absolute",right:6,bottom:-16,
-                    background:"none",border:"none",color:showAdvSearch?"#0ea5e9":"#334155",
+                    background:"none",border:"none",color:showAdvSearch?"#0ea5e9":"var(--text-faint)",
                     fontSize:10,cursor:"pointer",padding:0,fontFamily:"inherit",
                     textDecoration:"none",whiteSpace:"nowrap",
                   }}
-                  onMouseEnter={e=>(e.currentTarget.style.color="#64748b")}
-                  onMouseLeave={e=>(e.currentTarget.style.color=showAdvSearch?"#0ea5e9":"#334155")}
+                  onMouseEnter={e=>(e.currentTarget.style.color="var(--text-muted)")}
+                  onMouseLeave={e=>(e.currentTarget.style.color=showAdvSearch?"#0ea5e9":"var(--text-faint)")}
                 >
                   {showAdvSearch?"cancel":"advanced search"}
                 </button>
@@ -11790,19 +11954,19 @@ export default function Home(){
                 if(!results.length)return null;
                 return(
                   <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:200,
-                    background:"#1e293b",border:"1px solid #334155",borderRadius:8,
-                    minWidth:240,boxShadow:"0 4px 12px rgba(0,0,0,0.4)"}}>
+                    background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:8,
+                    minWidth:240,boxShadow:`0 4px 12px var(--shadow)`}}>
                     {results.map(p=>(
                       <button key={p.id} onClick={()=>{openPatient(p);setAdding(false);setPatientSearch("");}} style={{
                         width:"100%",textAlign:"left",padding:"8px 12px",border:"none",
                         background:"transparent",cursor:"pointer",fontFamily:"inherit",
-                        borderBottom:"1px solid #0f172a",
+                        borderBottom:"1px solid var(--bg-app)",
                       }}
-                        onMouseEnter={e=>(e.currentTarget.style.background="#0f172a")}
+                        onMouseEnter={e=>(e.currentTarget.style.background="var(--bg-hover)")}
                         onMouseLeave={e=>(e.currentTarget.style.background="transparent")}
                       >
-                        <div style={{color:"#e2e8f0",fontSize:12,fontWeight:600}}>{p.name}</div>
-                        <div style={{color:"#475569",fontSize:10}}>{p.dob} · {ageFromDob(p.dob).display}</div>
+                        <div style={{color:"var(--text-primary)",fontSize:12,fontWeight:600}}>{p.name}</div>
+                        <div style={{color:"var(--text-label)",fontSize:10}}>{p.dob} · {ageFromDob(p.dob).display}</div>
                       </button>
                     ))}
                   </div>
@@ -11812,9 +11976,9 @@ export default function Home(){
               {/* Advanced search panel */}
               {showAdvSearch&&(
                 <div style={{position:"absolute",top:"calc(100% + 22px)",right:0,zIndex:200,
-                  background:"#1e293b",border:"1px solid #334155",borderRadius:10,
-                  width:320,boxShadow:"0 4px 16px rgba(0,0,0,0.5)",padding:"14px 16px"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.5px"}}>Advanced Search</div>
+                  background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:10,
+                  width:320,boxShadow:`0 4px 16px var(--shadow-heavy)`,padding:"14px 16px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--text-muted)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.5px"}}>Advanced Search</div>
                   {([
                     ["phone","Phone","tel"],
                     ["dob","Date of Birth","date"],
@@ -11825,7 +11989,7 @@ export default function Home(){
                     ["zip","ZIP","text"],
                   ] as [keyof typeof advSearch,string,string][]).map(([field,label,type])=>(
                     <div key={field} style={{marginBottom:8}}>
-                      <label style={{fontSize:10,color:"#475569",display:"block",marginBottom:3}}>{label}</label>
+                      <label style={{fontSize:10,color:"var(--text-label)",display:"block",marginBottom:3}}>{label}</label>
                       <input type={type} value={advSearch[field]}
                         onChange={e=>setAdvSearch(a=>({...a,[field]:e.target.value}))}
                         style={{...S.input,fontSize:11,padding:"5px 8px"}}/>
@@ -11835,7 +11999,7 @@ export default function Home(){
                   {(()=>{
                     const hasQuery=Object.values(advSearch).some(v=>v.trim());
                     if(!hasQuery)return(
-                      <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"8px 0"}}>Enter fields to search</div>
+                      <div style={{fontSize:11,color:"var(--text-faint)",textAlign:"center",padding:"8px 0"}}>Enter fields to search</div>
                     );
                     const results=patients.filter(p=>{
                       if(advSearch.phone.trim()&&!(p.phone||"").replace(/\D/g,"").includes(advSearch.phone.replace(/\D/g,"")))return false;
@@ -11848,22 +12012,22 @@ export default function Home(){
                       return true;
                     });
                     if(!results.length)return(
-                      <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"8px 0"}}>No patients found</div>
+                      <div style={{fontSize:11,color:"var(--text-faint)",textAlign:"center",padding:"8px 0"}}>No patients found</div>
                     );
                     return(
-                      <div style={{borderTop:"1px solid #334155",marginTop:8,paddingTop:8}}>
-                        <div style={{fontSize:10,color:"#475569",marginBottom:6}}>{results.length} result{results.length!==1?"s":""}</div>
+                      <div style={{borderTop:"1px solid var(--border)",marginTop:8,paddingTop:8}}>
+                        <div style={{fontSize:10,color:"var(--text-label)",marginBottom:6}}>{results.length} result{results.length!==1?"s":""}</div>
                         {results.slice(0,6).map(p=>(
                           <button key={p.id} onClick={()=>{openPatient(p);setAdding(false);setShowAdvSearch(false);setAdvSearch({phone:"",dob:"",email:"",address:"",city:"",state:"",zip:"",});}} style={{
                             width:"100%",textAlign:"left",padding:"7px 8px",border:"none",
                             background:"transparent",cursor:"pointer",fontFamily:"inherit",
                             borderRadius:6,marginBottom:2,
                           }}
-                            onMouseEnter={e=>(e.currentTarget.style.background="#0f172a")}
+                            onMouseEnter={e=>(e.currentTarget.style.background="var(--bg-hover)")}
                             onMouseLeave={e=>(e.currentTarget.style.background="transparent")}
                           >
-                            <div style={{color:"#e2e8f0",fontSize:12,fontWeight:600}}>{p.name}</div>
-                            <div style={{color:"#475569",fontSize:10}}>
+                            <div style={{color:"var(--text-primary)",fontSize:12,fontWeight:600}}>{p.name}</div>
+                            <div style={{color:"var(--text-label)",fontSize:10}}>
                               {[p.dob,p.phone,p.city].filter(Boolean).join(" · ")}
                             </div>
                           </button>
@@ -11872,9 +12036,9 @@ export default function Home(){
                     );
                   })()}
                   <button onClick={()=>{setAdvSearch({phone:"",dob:"",email:"",address:"",city:"",state:"",zip:""});}}
-                    style={{marginTop:8,background:"none",border:"none",color:"#334155",fontSize:10,cursor:"pointer",fontFamily:"inherit",padding:0}}
-                    onMouseEnter={e=>(e.currentTarget.style.color="#64748b")}
-                    onMouseLeave={e=>(e.currentTarget.style.color="#334155")}
+                    style={{marginTop:8,background:"none",border:"none",color:"var(--text-faint)",fontSize:10,cursor:"pointer",fontFamily:"inherit",padding:0}}
+                    onMouseEnter={e=>(e.currentTarget.style.color="var(--text-muted)")}
+                    onMouseLeave={e=>(e.currentTarget.style.color="var(--text-faint)")}
                   >clear fields</button>
                 </div>
               )}
@@ -11901,21 +12065,21 @@ export default function Home(){
               </span>
             </div>
             <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
-            <Badge t="🔐 NIP-44 active" col="#a78bfa" bg="#1e1040"/>
+            <Badge t="🔐 NIP-44 active" col="#a78bfa"/>
             <button onClick={handleSignOut} style={{
-              background:"transparent",border:"1px solid #33415544",borderRadius:6,
-              padding:"3px 10px",color:"#64748b",fontSize:11,cursor:"pointer",
+              background:"transparent",border:"1px solid var(--border)",borderRadius:6,
+              padding:"3px 10px",color:"var(--text-muted)",fontSize:11,cursor:"pointer",
               fontFamily:"inherit",transition:"all 0.2s",
             }}
               onMouseEnter={e=>{e.currentTarget.style.color="#f87171";e.currentTarget.style.borderColor="#f8717144";}}
-              onMouseLeave={e=>{e.currentTarget.style.color="#64748b";e.currentTarget.style.borderColor="#33415544";}}
+              onMouseLeave={e=>{e.currentTarget.style.color="var(--text-muted)";e.currentTarget.style.borderColor="var(--border)";}}
             >Sign Out</button>
           </div>
         </div>
 
         {/* Patient tabs (when Patients view is active and patients are open) */}
         {view==="patients"&&openPatients.length>0&&(
-          <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:"1px solid #1e293b",paddingBottom:0}}>
+          <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:"1px solid var(--border-subtle)",paddingBottom:0}}>
             {openPatients.map((p, index) => (
               <div 
                 key={p.id}
@@ -11935,10 +12099,10 @@ export default function Home(){
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  background: activePatientId === p.id ? "#1e293b" : "transparent",
+                  background: activePatientId === p.id ? "var(--bg-card)" : "transparent",
                   padding: "8px 12px",
                   borderRadius: "8px 8px 0 0",
-                  border: activePatientId === p.id ? "1px solid #334155" : "1px solid transparent",
+                  border: activePatientId === p.id ? "1px solid var(--border)" : "1px solid transparent",
                   borderBottom: "none",
                   cursor: draggedTabId === p.id ? "grabbing" : "grab",
                   opacity: draggedTabId === p.id ? 0.5 : 1,
@@ -11950,7 +12114,7 @@ export default function Home(){
                   style={{
                     fontSize: 12,
                     fontWeight: activePatientId === p.id ? 600 : 400,
-                    color: activePatientId === p.id ? "#e2e8f0" : "#64748b",
+                    color: activePatientId === p.id ? "var(--text-primary)" : "var(--text-muted)",
                     cursor: "pointer"
                   }}
                 >
@@ -11961,7 +12125,7 @@ export default function Home(){
                   style={{
                     background: "transparent",
                     border: "none",
-                    color: "#64748b",
+                    color: "var(--text-muted)",
                     fontSize: 16,
                     cursor: "pointer",
                     padding: 0,
@@ -11997,19 +12161,21 @@ export default function Home(){
           />
         )}
         {adding&&(
-          <AddPatientForm onAdd={handleAdd} onCancel={()=>setAdding(false)} keys={keys} relay={relay}/>
+          <div style={{display:activePatient?"none":"block"}}>
+            <AddPatientForm onAdd={handleAdd} onCancel={()=>setAdding(false)} keys={keys} relay={relay}/>
+          </div>
         )}
-        {!adding&&!activePatient&&view==="patients"&&(
-          <div style={{...S.card,textAlign:"center",padding:48,color:"#334155"}}>
+        {!activePatient&&!adding&&view==="patients"&&(
+          <div style={{...S.card,textAlign:"center",padding:48,color:"var(--text-faint)"}}>
             <div style={{fontSize:32,marginBottom:12}}>🩺</div>
-            <div style={{fontSize:14,fontWeight:600,color:"#475569",marginBottom:8}}>
+            <div style={{fontSize:14,fontWeight:600,color:"var(--text-label)",marginBottom:8}}>
               {PRACTICE_NAME}
             </div>
             <div style={{fontSize:12,marginBottom:20}}>Select a patient from the list{keys?.pkHex===PRACTICE_PUBKEY?" or add a new one":""}</div>
             {keys?.pkHex===PRACTICE_PUBKEY&&<Btn solid col="#0ea5e9" onClick={()=>setAdding(true)}>+ Add Patient</Btn>}
           </div>
         )}
-        {!adding&&activePatient&&(
+        {activePatient&&(
           <PatientChart patient={activePatient} keys={keys} relay={relay}
             initialTab={(patientInitialTabs[activePatient.id] as ChartTab|undefined)}
             initialThreadId={patientInitialThreads[activePatient.id]}
@@ -12039,23 +12205,23 @@ export default function Home(){
         {/* Close confirmation dialog */}
         {closeConfirm.show&&closeConfirm.newPatient&&(
           <div style={{
-            position:"fixed",top:0,left:0,right:0,bottom:0,
-            background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",
-            justifyContent:"center",zIndex:1000
-          }}>
+              position:"fixed",top:0,left:0,right:0,bottom:0,
+              background:"var(--shadow-heavy)",display:"flex",alignItems:"center",
+              justifyContent:"center",zIndex:1000
+            }}>
             <div style={{...S.card,maxWidth:400,padding:24}}>
               <div style={{fontSize:16,fontWeight:700,marginBottom:12}}>
                 Maximum 4 Patient Charts Open
               </div>
-              <div style={{fontSize:13,color:"#94a3b8",marginBottom:20}}>
+              <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:20}}>
                 You already have 4 patient charts open. Which one would you like to close to open <strong>{closeConfirm.newPatient.name}</strong>?
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
                 {openPatients.map(p=>(
                   <button key={p.id} onClick={()=>replacePatient(p.id,closeConfirm.newPatient!)} style={{
-                    ...S.card,background:"#0f172a",border:"1px solid #334155",
+                    ...S.card,background:"var(--bg-app)",border:"1px solid var(--border)",
                     padding:"10px 14px",cursor:"pointer",textAlign:"left",
-                    fontSize:13,fontFamily:"inherit",color:"#e2e8f0"
+                    fontSize:13,fontFamily:"inherit",color:"var(--text-primary)"
                   }}>
                     Close: {p.name}
                   </button>
